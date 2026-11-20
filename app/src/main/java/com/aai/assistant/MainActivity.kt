@@ -70,7 +70,10 @@ class MainActivity : ComponentActivity() {
                         onUpdate = settingsVm::update,
                         onSave = settingsVm::save,
                         onLoadModels = settingsVm::loadModels,
-                        onPickModel = settingsVm::pickModel
+                        onPickModel = settingsVm::pickModel,
+                        onPreset = settingsVm::applyPreset,
+                        onTest = settingsVm::testConnection,
+                        onResetPrompt = settingsVm::resetPrompt
                     )
                 } else {
                     ModalNavigationDrawer(
@@ -98,7 +101,25 @@ class MainActivity : ComponentActivity() {
                                 ?: "aAi Agent",
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onOpenSettings = { showSettings = true },
-                            onSend = chatVm::send
+                            onSend = { text, images -> chatVm.send(text, images) },
+                            onStop = chatVm::stop,
+                            onMinimize = {
+                                if (Settings.canDrawOverlays(context)) {
+                                    ContextCompat.startForegroundService(
+                                        context,
+                                        Intent(context, OverlayService::class.java)
+                                            .setAction(OverlayService.ACTION_SHOW_PANEL)
+                                    )
+                                    moveTaskToBack(true)
+                                } else {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        )
+                                    )
+                                }
+                            }
                         )
                     }
                 }

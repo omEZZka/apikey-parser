@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 1, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
 
@@ -13,13 +15,19 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var instance: AppDatabase? = null
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN imagesJson TEXT DEFAULT NULL")
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aai.db"
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }

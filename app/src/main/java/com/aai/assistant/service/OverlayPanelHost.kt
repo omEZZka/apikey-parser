@@ -17,25 +17,27 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.aai.assistant.App
 import com.aai.assistant.ui.chat.ChatUiState
-import com.aai.assistant.ui.overlay.OverlayPanel
+import com.aai.assistant.ui.overlay.MiniChatPanel
 import com.aai.assistant.ui.theme.AaiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 class OverlayPanelHost(
     context: Context,
-    lifecycleOwner: LifecycleOwner,
-    viewModelStoreOwner: ViewModelStoreOwner,
-    savedStateOwner: SavedStateRegistryOwner,
-    private val onClose: () -> Unit
+    private val compactFlow: MutableStateFlow<Boolean>,
+    private val onToggleCompact: () -> Unit,
+    private val onClose: () -> Unit,
+    private val onDrag: (Float, Float) -> Unit,
+    private val onOpenApp: () -> Unit
 ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val repo = App.instance.repository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val stateFlow = kotlinx.coroutines.flow.MutableStateFlow(ChatUiState())
+    private val stateFlow = MutableStateFlow(ChatUiState())
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val store = ViewModelStore()
@@ -52,10 +54,16 @@ class OverlayPanelHost(
         setContent {
             AaiTheme {
                 val state by stateFlow.collectAsState()
-                OverlayPanel(
+                val compact by compactFlow.collectAsState()
+                MiniChatPanel(
                     state = state,
-                    onSend = { text -> send(text) },
-                    onClose = onClose
+                    compact = compact,
+                    onToggleCompact = onToggleCompact,
+                    onSend = { text, images -> send(text, images) },
+                    onStop = { stateFlow.value.activeSessionId?.let { repo.stopAgent(it) } },
+                    onClose = onClose,
+                    onDrag = onDrag,
+                    onOpenApp = onOpenApp
                 )
             }
         }
@@ -65,20 +73,24 @@ class OverlayPanelHost(
         savedStateController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         scope.launch {
-            val sessions = repo.observeSessions()
-            sessions.collect { list ->
-                val active = stateFlow.value.activeSessionId ?: list.firstOrNull()?.id
-                if (active != null && stateFlow.value.activeSessionId == null) {
-                    attach(active)
+            repo.observeSessions().collect { list ->
+                if (stateFlow.value.activeSessionId == null) {
+                    list.firstOrNull()?.let { attach(it.id) }
                 }
             }
         }
         scope.launch {
             repo.events.collect { event ->
                 when (event) {
+                    is com.aai.assistant.data.repo.AgentEvent.IterationInfo ->
+                        if (event.sessionId == stateFlow.value.activeSessionId) {
+                            stateFlow.value = stateFlow.value.copy(
+                                iterationInfo = "шаг ${event.iteration}/${event.max}"
+                            )
+                        }
                     is com.aai.assistant.data.repo.AgentEvent.Done ->
                         if (event.sessionId == stateFlow.value.activeSessionId) {
-                            stateFlow.value = stateFlow.value.copy(isRunning = false)
+                            stateFlow.value = stateFlow.value.copy(isRunning = false, iterationInfo = null)
                         }
                     is com.aai.assistant.data.repo.AgentEvent.Failed ->
                         if (event.sessionId == stateFlow.value.activeSessionId) {
@@ -92,7 +104,7 @@ class OverlayPanelHost(
 
     private var messagesJob: kotlinx.coroutines.Job? = null
 
-    private fun attach(sessionId: Long) {
+    fun attach(sessionId: Long) {
         stateFlow.value = ChatUiState(activeSessionId = sessionId, isRunning = repo.isRunning(sessionId))
         messagesJob?.cancel()
         messagesJob = scope.launch {
@@ -102,15 +114,17 @@ class OverlayPanelHost(
         }
     }
 
-    private fun send(text: String) {
+    fun isRunning(): Boolean = stateFlow.value.isRunning
+
+    private fun send(text: String, images: List<String>) {
         scope.launch {
             var sessionId = stateFlow.value.activeSessionId
             if (sessionId == null) {
-                sessionId = repo.createSession("Оверлей: " + text.take(30))
+                sessionId = repo.createSession("Мини: " + text.ifBlank { "📷 Фото" }.take(30))
                 attach(sessionId)
             }
             stateFlow.value = stateFlow.value.copy(isRunning = true, error = null)
-            scope.launch(Dispatchers.IO) { repo.runAgentTurn(sessionId, text) }
+            repo.launchAgentTurn(sessionId, text, images)
         }
     }
 

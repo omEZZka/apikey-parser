@@ -1,13 +1,16 @@
 package com.aai.assistant.ui.settings
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,64 +19,116 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aai.assistant.data.prefs.AgentSettings
 import com.aai.assistant.tools.ScreenBridge
+import com.aai.assistant.ui.theme.AccentAmber
 import com.aai.assistant.ui.theme.AccentGreen
 import com.aai.assistant.ui.theme.AccentRed
+import com.aai.assistant.ui.theme.AgentGradient
+import com.aai.assistant.ui.theme.OutlineDim
+import com.aai.assistant.ui.theme.TextMuted
+import com.aai.assistant.ui.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
     onBack: () -> Unit,
-    onUpdate: ((com.aai.assistant.data.prefs.AgentSettings) -> com.aai.assistant.data.prefs.AgentSettings) -> Unit,
+    onUpdate: ((AgentSettings) -> AgentSettings) -> Unit,
     onSave: () -> Unit,
     onLoadModels: () -> Unit,
-    onPickModel: (String) -> Unit
+    onPickModel: (String) -> Unit,
+    onPreset: (ProviderPreset) -> Unit,
+    onTest: () -> Unit,
+    onResetPrompt: () -> Unit
 ) {
     val context = LocalContext.current
     val s = state.settings
+    var keyVisible by rememberSaveable { mutableStateOf(false) }
+    var modelFilter by rememberSaveable { mutableStateOf("") }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = { Text("Настройки") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                title = { Text("Настройки", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                actions = {
+                    Row(
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(AgentGradient)
+                            .clickable(onClick = onSave)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            if (state.saved) Icons.Default.Check else Icons.Default.Save,
+                            contentDescription = null,
+                            tint = Color(0xFF07090F),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (state.saved) "Готово" else "Сохранить",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFF07090F)
+                        )
                     }
                 }
             )
@@ -84,159 +139,328 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            SectionTitle("Провайдер API")
-            OutlinedTextField(
-                value = s.baseUrl,
-                onValueChange = { v -> onUpdate { it.copy(baseUrl = v) } },
-                label = { Text("Base URL") },
-                placeholder = { Text("https://api.openai.com/v1") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = s.apiKey,
-                onValueChange = { v -> onUpdate { it.copy(apiKey = v) } },
-                label = { Text("API Key") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = s.model,
-                onValueChange = { v -> onUpdate { it.copy(model = v) } },
-                label = { Text("Model ID") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedButton(
-                onClick = onLoadModels,
-                enabled = !state.loadingModels,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (state.loadingModels) {
-                    CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text("Загрузить список моделей (GET /models)")
-            }
-            state.modelsError?.let {
-                Text(it, color = AccentRed, fontSize = 12.sp)
-            }
-            if (state.models.isNotEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
+            SectionCard(title = "Провайдер", subtitle = "OpenAI-совместимый API") {
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    providerPresets.forEach { preset ->
+                        val active = s.baseUrl.trimEnd('/') == preset.baseUrl
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    if (active) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .border(
+                                    1.dp,
+                                    if (active) MaterialTheme.colorScheme.primary else OutlineDim,
+                                    RoundedCornerShape(50)
+                                )
+                                .clickable { onPreset(preset) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                preset.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
+                                else TextSecondary
+                            )
+                        }
+                    }
+                }
+                Field(
+                    value = s.baseUrl,
+                    onChange = { v -> onUpdate { it.copy(baseUrl = v) } },
+                    label = "Base URL",
+                    placeholder = "https://api.openai.com/v1"
+                )
+                OutlinedTextField(
+                    value = s.apiKey,
+                    onValueChange = { v -> onUpdate { it.copy(apiKey = v) } },
+                    label = { Text("API Key") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Key, contentDescription = null, tint = TextMuted)
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { keyVisible = !keyVisible }) {
+                            Icon(
+                                if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = "Показать ключ",
+                                tint = TextMuted
+                            )
+                        }
+                    },
+                    singleLine = true,
+                    visualTransformation = if (keyVisible) VisualTransformation.None
+                    else PasswordVisualTransformation(),
+                    colors = fieldColors(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = !state.testing, onClick = onTest)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.testing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = AccentAmber
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = AccentAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Проверить соединение",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                state.testResult?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state.testOk) AccentGreen else AccentRed
+                    )
+                }
+            }
+
+            SectionCard(title = "Модель", subtitle = "Ручной ввод или список с сервера") {
+                Field(
+                    value = s.model,
+                    onChange = { v -> onUpdate { it.copy(model = v) } },
+                    label = "Model ID",
+                    placeholder = "gpt-4o-mini"
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = !state.loadingModels, onClick = onLoadModels)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.loadingModels) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Загрузить модели (GET /models)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                state.modelsError?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = AccentRed)
+                }
+                if (state.models.isNotEmpty()) {
+                    Field(
+                        value = modelFilter,
+                        onChange = { modelFilter = it },
+                        label = "Поиск по ${state.models.size} моделям",
+                        placeholder = "например: claude"
+                    )
+                    val filtered = state.models.filter {
+                        modelFilter.isBlank() || it.id.contains(modelFilter, ignoreCase = true)
+                    }
                     Column(
                         modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .verticalScroll(rememberScrollState())
-                            .padding(8.dp)
+                            .padding(6.dp)
                     ) {
-                        state.models.forEach { model ->
+                        filtered.forEach { model ->
+                            val active = model.id == s.model
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (active) MaterialTheme.colorScheme.primaryContainer
+                                        else Color.Transparent
+                                    )
                                     .clickable { onPickModel(model.id) }
-                                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     model.id,
-                                    fontSize = 13.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.weight(1f),
-                                    color = if (model.id == s.model) MaterialTheme.colorScheme.primary
+                                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                                     else MaterialTheme.colorScheme.onSurface
                                 )
-                                if (model.id == s.model) {
+                                if (active) {
                                     Icon(
                                         Icons.Default.CheckCircle,
                                         contentDescription = null,
-                                        tint = AccentGreen
+                                        tint = AccentGreen,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
+                        }
+                        if (filtered.isEmpty()) {
+                            Text(
+                                "Ничего не найдено",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted,
+                                modifier = Modifier.padding(10.dp)
+                            )
                         }
                     }
                 }
             }
 
-            SectionTitle("Генерация")
-            OutlinedTextField(
-                value = s.systemPrompt,
-                onValueChange = { v -> onUpdate { it.copy(systemPrompt = v) } },
-                label = { Text("Системный промт") },
-                minLines = 3,
-                maxLines = 8,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text("Temperature: ${"%.2f".format(s.temperature)}", fontSize = 13.sp)
-            Slider(
-                value = s.temperature,
-                onValueChange = { v -> onUpdate { it.copy(temperature = v) } },
-                valueRange = 0f..2f
-            )
-            OutlinedTextField(
-                value = s.maxTokens.toString(),
-                onValueChange = { v -> v.toIntOrNull()?.let { n -> onUpdate { it.copy(maxTokens = n.coerceIn(1, 128000)) } } },
-                label = { Text("max_tokens") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = s.maxIterations.toString(),
-                onValueChange = { v -> v.toIntOrNull()?.let { n -> onUpdate { it.copy(maxIterations = n.coerceIn(1, 100)) } } },
-                label = { Text("Макс. шагов агента за ход") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
-                Text(if (state.saved) "Сохранено ✓" else "Сохранить настройки")
+            SectionCard(title = "Генерация", subtitle = "Параметры ответа модели") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Temperature",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            "%.2f".format(s.temperature),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Slider(
+                    value = s.temperature,
+                    onValueChange = { v -> onUpdate { it.copy(temperature = v) } },
+                    valueRange = 0f..2f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Field(
+                        value = s.maxTokens.toString(),
+                        onChange = { v ->
+                            v.filter { it.isDigit() }.toIntOrNull()?.let { n ->
+                                onUpdate { it.copy(maxTokens = n.coerceIn(1, 128000)) }
+                            }
+                        },
+                        label = "max_tokens",
+                        numeric = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Field(
+                        value = s.maxIterations.toString(),
+                        onChange = { v ->
+                            v.filter { it.isDigit() }.toIntOrNull()?.let { n ->
+                                onUpdate { it.copy(maxIterations = n.coerceIn(1, 100)) }
+                            }
+                        },
+                        label = "шагов агента",
+                        numeric = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
-            SectionTitle("Разрешения устройства")
-            PermissionRow(
-                icon = Icons.Default.Accessibility,
-                title = "Специальные возможности",
-                subtitle = if (ScreenBridge.isConnected()) "Подключено — агент видит экран" else "Не подключено — нужно для управления UI",
-                ok = ScreenBridge.isConnected()
-            ) {
-                context.startActivity(
-                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            SectionCard(title = "Системный промт", subtitle = "Личность и правила агента") {
+                OutlinedTextField(
+                    value = s.systemPrompt,
+                    onValueChange = { v -> onUpdate { it.copy(systemPrompt = v) } },
+                    minLines = 4,
+                    maxLines = 10,
+                    colors = fieldColors(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "↺ Вернуть стандартный промт",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onResetPrompt)
+                        .padding(vertical = 6.dp, horizontal = 4.dp)
                 )
             }
-            PermissionRow(
-                icon = Icons.Default.Layers,
-                title = "Поверх других приложений",
-                subtitle = "Плавающая кнопка ассистента",
-                ok = Settings.canDrawOverlays(context)
-            ) {
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
-            PermissionRow(
-                icon = Icons.Default.Folder,
-                title = "Доступ ко всем файлам",
-                subtitle = "MANAGE_EXTERNAL_STORAGE для file_* инструментов",
-                ok = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
-            ) {
-                if (Build.VERSION.SDK_INT >= 30) {
+
+            SectionCard(title = "Разрешения", subtitle = "Нужны для управления устройством") {
+                PermissionRow(
+                    icon = Icons.Default.Accessibility,
+                    title = "Специальные возможности",
+                    subtitle = if (ScreenBridge.isConnected()) "Подключено — агент видит экран"
+                    else "Выключено — UI-инструменты не работают",
+                    ok = ScreenBridge.isConnected()
+                ) {
+                    context.startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+                PermissionRow(
+                    icon = Icons.Default.Layers,
+                    title = "Поверх других приложений",
+                    subtitle = "Плавающий мини-чат и кнопка ассистента",
+                    ok = Settings.canDrawOverlays(context)
+                ) {
                     context.startActivity(
                         Intent(
-                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:${context.packageName}")
                         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
+                }
+                PermissionRow(
+                    icon = Icons.Default.Folder,
+                    title = "Доступ ко всем файлам",
+                    subtitle = "MANAGE_EXTERNAL_STORAGE для file_* инструментов",
+                    ok = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+                ) {
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -245,12 +469,59 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        fontSize = 14.sp,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp)
+private fun SectionCard(
+    title: String,
+    subtitle: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, OutlineDim, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = TextMuted)
+        }
+        content()
+    }
+}
+
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = OutlineDim,
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.primary
+)
+
+@Composable
+private fun Field(
+    value: String,
+    onChange: (String) -> Unit,
+    label: String,
+    placeholder: String = "",
+    numeric: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label, fontSize = 13.sp) },
+        placeholder = if (placeholder.isNotEmpty()) {
+            { Text(placeholder, fontSize = 13.sp, color = TextMuted) }
+        } else null,
+        singleLine = true,
+        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number)
+        else KeyboardOptions.Default,
+        colors = fieldColors(),
+        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.fillMaxWidth()
     )
 }
 
@@ -262,26 +533,46 @@ private fun PermissionRow(
     ok: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(
+                    (if (ok) AccentGreen else AccentAmber).copy(alpha = 0.15f)
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontSize = 14.sp)
-                Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
             Icon(
-                Icons.Default.CheckCircle,
+                icon,
                 contentDescription = null,
-                tint = if (ok) AccentGreen else AccentRed
+                tint = if (ok) AccentGreen else AccentAmber,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background((if (ok) AccentGreen else AccentRed).copy(alpha = 0.15f))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                if (ok) "ON" else "OFF",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (ok) AccentGreen else AccentRed
             )
         }
     }

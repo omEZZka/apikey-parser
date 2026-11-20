@@ -7,12 +7,19 @@ import com.aai.assistant.data.db.MessageEntity
 import com.aai.assistant.data.db.SessionEntity
 import com.aai.assistant.data.prefs.SettingsStore
 import com.aai.assistant.domain.ChatMessage
+import com.aai.assistant.domain.multimodalContent
+import com.aai.assistant.domain.textContent
 import com.aai.assistant.domain.ToolCall
 import com.aai.assistant.tools.ToolRegistry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -23,6 +30,7 @@ sealed class AgentEvent {
     data class ToolFinished(val sessionId: Long, val call: ToolCall, val output: String, val isError: Boolean) : AgentEvent()
     data class IterationInfo(val sessionId: Long, val iteration: Int, val max: Int) : AgentEvent()
     data class Failed(val sessionId: Long, val error: String) : AgentEvent()
+    data class Stopped(val sessionId: Long) : AgentEvent()
     data class Done(val sessionId: Long) : AgentEvent()
 }
 
@@ -38,53 +46,96 @@ class ChatRepository(
     val events: SharedFlow<AgentEvent> = _events
 
     private val runningSessions = mutableSetOf<Long>()
+    private val sessionJobs = mutableMapOf<Long, Job>()
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+    )
 
     fun observeSessions(): Flow<List<SessionEntity>> = dao.observeSessions()
     fun observeMessages(sessionId: Long): Flow<List<MessageEntity>> = dao.observeMessages(sessionId)
 
     fun isRunning(sessionId: Long): Boolean = synchronized(runningSessions) { sessionId in runningSessions }
 
+    fun stopAgent(sessionId: Long) {
+        synchronized(runningSessions) { sessionJobs[sessionId] }?.cancel()
+    }
+
+    fun stopAll() {
+        val jobs = synchronized(runningSessions) { sessionJobs.values.toList() }
+        jobs.forEach { it.cancel() }
+    }
+
+    fun launchAgentTurn(sessionId: Long, userText: String?, images: List<String> = emptyList()): Job {
+        val job = scope.launch {
+            synchronized(runningSessions) {
+                if (sessionId in runningSessions) return@launch
+                runningSessions.add(sessionId)
+                sessionJobs[sessionId] = requireNotNull(coroutineContext[Job])
+            }
+            try {
+                if (userText != null || images.isNotEmpty()) {
+                    val text = userText.orEmpty()
+                    dao.insertMessage(
+                        MessageEntity(
+                            sessionId = sessionId,
+                            role = "user",
+                            content = text,
+                            imagesJson = if (images.isEmpty()) null else
+                                json.encodeToString(
+                                    com.aai.assistant.domain.StringListSerializer,
+                                    images
+                                )
+                        )
+                    )
+                    dao.touchSession(sessionId)
+                    maybeAutoTitle(sessionId, text.ifBlank { "📷 Фото" })
+                }
+                agentLoop(sessionId)
+            } catch (e: CancellationException) {
+                withContext(NonCancellable) {
+                    dao.insertMessage(
+                        MessageEntity(
+                            sessionId = sessionId,
+                            role = "error",
+                            content = "⏹ Агент остановлен пользователем. Отправь сообщение, чтобы продолжить.",
+                            isError = true
+                        )
+                    )
+                    _events.emit(AgentEvent.Stopped(sessionId))
+                }
+                throw e
+            } catch (e: Exception) {
+                val msg = e.message ?: e.javaClass.simpleName
+                dao.insertMessage(MessageEntity(sessionId = sessionId, role = "error", content = msg, isError = true))
+                _events.emit(AgentEvent.Failed(sessionId, msg))
+            } finally {
+                withContext(NonCancellable) {
+                    synchronized(runningSessions) {
+                        runningSessions.remove(sessionId)
+                        sessionJobs.remove(sessionId)
+                    }
+                    _events.emit(AgentEvent.Done(sessionId))
+                }
+            }
+        }
+        return job
+    }
+
+    suspend fun runAgentTurn(sessionId: Long, userText: String, images: List<String> = emptyList()) {
+        launchAgentTurn(sessionId, userText, images).join()
+    }
+
+    suspend fun continueAgent(sessionId: Long) {
+        launchAgentTurn(sessionId, null).join()
+    }
+
     suspend fun createSession(title: String = "Новый чат"): Long =
         dao.insertSession(SessionEntity(title = title))
 
     suspend fun renameSession(id: Long, title: String) = dao.renameSession(id, title)
-    suspend fun deleteSession(id: Long) = dao.deleteSession(id)
-
-    suspend fun runAgentTurn(sessionId: Long, userText: String) = withContext(Dispatchers.IO) {
-        synchronized(runningSessions) {
-            if (sessionId in runningSessions) return@withContext
-            runningSessions.add(sessionId)
-        }
-        try {
-            dao.insertMessage(MessageEntity(sessionId = sessionId, role = "user", content = userText))
-            dao.touchSession(sessionId)
-            maybeAutoTitle(sessionId, userText)
-            agentLoop(sessionId)
-        } catch (e: Exception) {
-            val msg = e.message ?: e.javaClass.simpleName
-            dao.insertMessage(MessageEntity(sessionId = sessionId, role = "error", content = msg, isError = true))
-            _events.emit(AgentEvent.Failed(sessionId, msg))
-        } finally {
-            synchronized(runningSessions) { runningSessions.remove(sessionId) }
-            _events.emit(AgentEvent.Done(sessionId))
-        }
-    }
-
-    suspend fun continueAgent(sessionId: Long) = withContext(Dispatchers.IO) {
-        synchronized(runningSessions) {
-            if (sessionId in runningSessions) return@withContext
-            runningSessions.add(sessionId)
-        }
-        try {
-            agentLoop(sessionId)
-        } catch (e: Exception) {
-            val msg = e.message ?: e.javaClass.simpleName
-            dao.insertMessage(MessageEntity(sessionId = sessionId, role = "error", content = msg, isError = true))
-            _events.emit(AgentEvent.Failed(sessionId, msg))
-        } finally {
-            synchronized(runningSessions) { runningSessions.remove(sessionId) }
-            _events.emit(AgentEvent.Done(sessionId))
-        }
+    suspend fun deleteSession(id: Long) {
+        stopAgent(id)
+        dao.deleteSession(id)
     }
 
     private suspend fun maybeAutoTitle(sessionId: Long, userText: String) {
@@ -102,6 +153,7 @@ class ChatRepository(
         }
         var iteration = 0
         while (iteration < settings.maxIterations) {
+            kotlin.coroutines.coroutineContext.ensureActive()
             iteration++
             _events.emit(AgentEvent.IterationInfo(sessionId, iteration, settings.maxIterations))
             val history = buildHistory(sessionId, settings.systemPrompt)
@@ -144,6 +196,7 @@ class ChatRepository(
                 )
             )
             for (call in completed.toolCalls) {
+                kotlin.coroutines.coroutineContext.ensureActive()
                 _events.emit(AgentEvent.ToolStarted(sessionId, call))
                 val toolResult = executeTool(call)
                 dao.insertMessage(
@@ -179,20 +232,37 @@ class ChatRepository(
             return "Ошибка: невалидный JSON аргументов: ${e.message}" to true
         }
         return try {
-            val result = tool.execute(args)
+            val result = kotlinx.coroutines.withTimeout(180_000) { tool.execute(args) }
             result.output to result.isError
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            "Инструмент '${call.function.name}' превысил таймаут 180с и был прерван" to true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             "Исключение в инструменте: ${e.message}" to true
         }
     }
 
     private suspend fun buildHistory(sessionId: Long, systemPrompt: String): List<ChatMessage> {
-        val messages = mutableListOf(ChatMessage(role = "system", content = systemPrompt))
-        for (entity in dao.getMessages(sessionId)) {
+        val messages = mutableListOf(ChatMessage(role = "system", content = textContent(systemPrompt)))
+        val entities = dao.getMessages(sessionId)
+        val answeredIds = entities.filter { it.role == "tool" }.mapNotNull { it.toolCallId }.toSet()
+        for (entity in entities) {
             when (entity.role) {
-                "user" -> messages.add(ChatMessage(role = "user", content = entity.content))
+                "user" -> {
+                    val images = entity.imagesJson?.let {
+                        runCatching {
+                            json.decodeFromString(
+                                com.aai.assistant.domain.StringListSerializer, it
+                            )
+                        }.getOrNull()
+                    } ?: emptyList()
+                    messages.add(
+                        ChatMessage(role = "user", content = multimodalContent(entity.content, images))
+                    )
+                }
                 "assistant" -> if (entity.content.isNotBlank()) {
-                    messages.add(ChatMessage(role = "assistant", content = entity.content))
+                    messages.add(ChatMessage(role = "assistant", content = textContent(entity.content)))
                 }
                 "assistant_calls" -> {
                     val calls = entity.toolCallsJson?.let {
@@ -200,12 +270,23 @@ class ChatRepository(
                             kotlinx.serialization.builtins.ListSerializer(ToolCall.serializer()), it
                         )
                     } ?: continue
+                    val pending = calls.filter { it.id !in answeredIds }
                     messages.add(ChatMessage(role = "assistant", content = null, toolCalls = calls))
+                    pending.forEach { call ->
+                        messages.add(
+                            ChatMessage(
+                                role = "tool",
+                                content = textContent("Инструмент был прерван (агент остановлен пользователем), результат отсутствует."),
+                                toolCallId = call.id,
+                                name = call.function.name
+                            )
+                        )
+                    }
                 }
                 "tool" -> messages.add(
                     ChatMessage(
                         role = "tool",
-                        content = entity.content,
+                        content = textContent(entity.content),
                         toolCallId = entity.toolCallId,
                         name = entity.toolName
                     )

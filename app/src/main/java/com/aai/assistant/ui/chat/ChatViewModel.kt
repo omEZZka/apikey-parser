@@ -47,6 +47,14 @@ class ChatViewModel : ViewModel() {
                         if (event.sessionId == _state.value.activeSessionId) {
                             _state.value = _state.value.copy(error = event.error)
                         }
+                    is AgentEvent.Stopped ->
+                        if (event.sessionId == _state.value.activeSessionId) {
+                            _state.value = _state.value.copy(
+                                isRunning = false,
+                                iterationInfo = null,
+                                error = "Агент остановлен"
+                            )
+                        }
                     is AgentEvent.Done ->
                         if (event.sessionId == _state.value.activeSessionId) {
                             _state.value = _state.value.copy(isRunning = false, iterationInfo = null)
@@ -97,9 +105,9 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun send(text: String) {
+    fun send(text: String, images: List<String> = emptyList()) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() && images.isEmpty()) return
         viewModelScope.launch {
             var sessionId = _state.value.activeSessionId
             if (sessionId == null) {
@@ -107,8 +115,12 @@ class ChatViewModel : ViewModel() {
                 selectSession(sessionId)
             }
             _state.value = _state.value.copy(isRunning = true, error = null)
-            repo.runAgentTurn(sessionId, trimmed)
+            repo.runAgentTurn(sessionId, trimmed, images)
         }
+    }
+
+    fun stop() {
+        _state.value.activeSessionId?.let { repo.stopAgent(it) }
     }
 
     fun clearError() {

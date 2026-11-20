@@ -4,23 +4,33 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,10 +42,18 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.aai.assistant.ui.theme.AccentBlue
+import com.aai.assistant.ui.theme.AccentCyan
+import com.aai.assistant.ui.theme.AccentGreen
+import com.aai.assistant.ui.theme.AccentViolet
+import com.aai.assistant.ui.theme.BgDark
+import com.aai.assistant.ui.theme.OutlineDim
+import com.aai.assistant.ui.theme.SurfaceHigh
+import com.aai.assistant.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 sealed class MdBlock {
     data class Code(val language: String, val code: String) : MdBlock()
@@ -75,26 +93,35 @@ fun parseMarkdownBlocks(markdown: String): List<MdBlock> {
     return blocks
 }
 
-private val inlinePattern = Regex("""(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(?!\*)(.+?)\*)""")
+private val inlinePattern = Regex(
+    """(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(?!\*)(.+?)\*)|(~~(.+?)~~)|(\[([^\]]+)\]\((https?://[^)]+)\))"""
+)
 
 fun renderInline(text: String): AnnotatedString = buildAnnotatedString {
     var last = 0
     for (match in inlinePattern.findAll(text)) {
         append(text.substring(last, match.range.first))
         when {
-            match.groups[2] != null -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                append(match.groups[2]!!.value)
-            }
+            match.groups[2] != null -> withStyle(
+                SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFFF4F7FF))
+            ) { append(match.groups[2]!!.value) }
             match.groups[4] != null -> withStyle(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
-                    background = Color(0x3358A6FF),
+                    color = AccentCyan,
+                    background = Color(0x224FD8EB),
                     fontSize = 13.sp
                 )
             ) { append(match.groups[4]!!.value) }
             match.groups[6] != null -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                 append(match.groups[6]!!.value)
             }
+            match.groups[8] != null -> withStyle(
+                SpanStyle(textDecoration = TextDecoration.LineThrough, color = TextSecondary)
+            ) { append(match.groups[8]!!.value) }
+            match.groups[10] != null -> withStyle(
+                SpanStyle(color = AccentViolet, textDecoration = TextDecoration.Underline)
+            ) { append(match.groups[10]!!.value) }
         }
         last = match.range.last + 1
     }
@@ -123,43 +150,61 @@ private fun TextLines(text: String) {
                 line.startsWith("### ") -> Text(
                     renderInline(line.removePrefix("### ")),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = AccentCyan
                 )
                 line.startsWith("## ") -> Text(
                     renderInline(line.removePrefix("## ")),
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = AccentCyan
                 )
                 line.startsWith("# ") -> Text(
                     renderInline(line.removePrefix("# ")),
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                line.trimStart().startsWith("- ") || line.trimStart().startsWith("* ") -> Row {
-                    Text("•  ", color = AccentBlue, fontSize = 15.sp)
+                line.trim() == "---" || line.trim() == "***" -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(OutlineDim)
+                )
+                line.trimStart().startsWith("> ") -> Row {
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .height(18.dp)
+                            .background(AccentViolet)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         renderInline(line.trimStart().drop(2)),
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        fontStyle = FontStyle.Italic
+                    )
+                }
+                line.trimStart().startsWith("- ") || line.trimStart().startsWith("* ") -> Row {
+                    Text("•  ", color = AccentViolet, fontSize = 15.sp)
+                    Text(
+                        renderInline(line.trimStart().drop(2)),
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Regex("""^\d+[.)]\s""").containsMatchIn(line.trimStart()) -> Row {
                     val trimmed = line.trimStart()
                     val num = trimmed.takeWhile { it.isDigit() || it == '.' || it == ')' }
-                    Text("$num ", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("$num ", color = AccentViolet, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Text(
                         renderInline(trimmed.drop(num.length).trimStart()),
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 line.isBlank() -> Spacer(Modifier.width(2.dp))
                 else -> Text(
                     renderInline(line),
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -170,42 +215,63 @@ private fun TextLines(text: String) {
 @Composable
 fun CodeBlock(language: String, code: String) {
     val context = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1600)
+            copied = false
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF0A0E14))
+            .clip(RoundedCornerShape(14.dp))
+            .background(BgDark)
+            .border(1.dp, OutlineDim, RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1C2128))
+                .background(SurfaceHigh.copy(alpha = 0.5f))
                 .padding(horizontal = 12.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                Modifier
+                    .size(7.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(AccentViolet)
+            )
+            Spacer(Modifier.width(7.dp))
             Text(
                 language.ifBlank { "code" },
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = TextSecondary,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
-            }) {
+            IconButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+                    copied = true
+                },
+                modifier = Modifier.size(30.dp)
+            ) {
                 Icon(
-                    Icons.Default.ContentCopy,
+                    if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                     contentDescription = "Копировать код",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(18.dp)
+                    tint = if (copied) AccentGreen else TextSecondary,
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
         Text(
             code,
             fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp,
-            color = Color(0xFF7EE787),
+            fontSize = 12.5.sp,
+            lineHeight = 18.sp,
+            color = Color(0xFF9CE8C3),
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
                 .padding(12.dp)

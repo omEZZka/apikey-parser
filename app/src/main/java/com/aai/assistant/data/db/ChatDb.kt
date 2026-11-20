@@ -37,6 +37,7 @@ data class MessageEntity(
     val toolCallId: String? = null,
     val toolName: String? = null,
     val isError: Boolean = false,
+    val imagesJson: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
 
