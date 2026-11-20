@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">aAi Agent</string>
+    <string name="accessibility_label">aAi Device Control</string>
+    <string name="accessibility_description">Позволяет AI-агенту читать элементы экрана и выполнять нажатия, свайпы и ввод текста для управления устройством по вашим командам.</string>
+    <string name="overlay_channel">Фоновая работа ассистента</string>
+    <string name="overlay_notification_title">aAi ассистент активен</string>
+    <string name="overlay_notification_text">Плавающая кнопка доступна поверх приложений</string>
+</resources>
