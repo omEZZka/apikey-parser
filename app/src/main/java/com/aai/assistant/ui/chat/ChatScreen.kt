@@ -31,14 +31,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PictureInPictureAlt
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -70,6 +62,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aai.assistant.ui.components.aaiIcon
+import com.aai.assistant.ui.components.AaiIcons
 import com.aai.assistant.data.db.MessageEntity
 import com.aai.assistant.data.media.ImageImporter
 import com.aai.assistant.domain.ToolCall
@@ -96,7 +90,8 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onSend: (String, List<String>) -> Unit,
     onStop: () -> Unit,
-    onMinimize: () -> Unit
+    onMinimize: () -> Unit,
+    onContinue: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -160,19 +155,18 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Меню")
+                        Icon(aaiIcon(AaiIcons.Menu), contentDescription = "Меню")
                     }
                 },
                 actions = {
                     IconButton(onClick = onMinimize) {
-                        Icon(
-                            Icons.Default.PictureInPictureAlt,
+                        Icon(aaiIcon(AaiIcons.Pip),
                             contentDescription = "Свернуть в плавающий чат",
                             tint = MaterialTheme.colorScheme.secondary
                         )
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        Icon(aaiIcon(AaiIcons.Settings), contentDescription = "Настройки")
                     }
                 }
             )
@@ -184,6 +178,44 @@ fun ChatScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .imePadding()
             ) {
+                val lastIsStopped = !state.isRunning &&
+                    state.messages.lastOrNull()?.let {
+                        it.role == "error" && it.content.contains("остановлен")
+                    } == true
+                AnimatedVisibility(
+                    visible = lastIsStopped,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(SendGradient)
+                                .clickable(onClick = onContinue)
+                                .padding(horizontal = 18.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                aaiIcon(AaiIcons.Play),
+                                contentDescription = null,
+                                tint = Color(0xFF0B0716),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Продолжить",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color(0xFF0B0716)
+                            )
+                        }
+                    }
+                }
                 AnimatedVisibility(
                     visible = state.isRunning,
                     enter = fadeIn(),
@@ -203,8 +235,7 @@ fun ChatScreen(
                                 .padding(horizontal = 18.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.Stop,
+                            Icon(aaiIcon(AaiIcons.Stop),
                                 contentDescription = null,
                                 tint = Color(0xFF2B0B0B),
                                 modifier = Modifier.size(18.dp)
@@ -274,8 +305,7 @@ fun ChatScreen(
                             .padding(bottom = 4.dp)
                             .size(40.dp)
                     ) {
-                        Icon(
-                            Icons.Default.AttachFile,
+                        Icon(aaiIcon(AaiIcons.Attach),
                             contentDescription = "Прикрепить фото",
                             tint = if (attachedImages.isNotEmpty()) MaterialTheme.colorScheme.primary else TextMuted,
                             modifier = Modifier.size(21.dp)
@@ -326,8 +356,7 @@ fun ChatScreen(
                                 color = AccentAmber
                             )
                         } else {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Send,
+                            Icon(aaiIcon(AaiIcons.Send),
                                 contentDescription = "Отправить",
                                 tint = if (canSend) Color(0xFF0B0716) else TextMuted,
                                 modifier = Modifier.size(20.dp)
@@ -355,7 +384,9 @@ fun ChatScreen(
                 items(state.messages, key = { it.id }) { message ->
                     when (message.role) {
                         "user" -> UserBubble(message.content, message.imagesJson)
-                        "assistant" -> AssistantBubble(message.content)
+                        "assistant" -> if (message.content.isNotBlank()) {
+                            AssistantBubble(message.content)
+                        }
                         "assistant_calls" -> {
                             val calls = message.toolCallsJson?.let {
                                 runCatching {
@@ -503,8 +534,7 @@ private fun AttachedThumb(base64: String, onRemove: () -> Unit) {
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Default.Close,
+            Icon(aaiIcon(AaiIcons.Close),
                 contentDescription = "Убрать фото",
                 tint = Color.White,
                 modifier = Modifier.size(12.dp)
@@ -515,6 +545,7 @@ private fun AttachedThumb(base64: String, onRemove: () -> Unit) {
 
 @Composable
 private fun AssistantBubble(text: String) {
+    val context = LocalContext.current
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Column(modifier = Modifier.widthIn(max = 340.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -523,7 +554,21 @@ private fun AssistantBubble(text: String) {
                 Text(
                     "aAi",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted
+                    color = TextMuted,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    aaiIcon(AaiIcons.Copy),
+                    contentDescription = "Копировать ответ",
+                    tint = TextMuted,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clickable {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("aai", text))
+                        }
                 )
             }
             Spacer(Modifier.height(4.dp))

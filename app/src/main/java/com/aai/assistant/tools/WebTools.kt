@@ -110,9 +110,9 @@ class HttpRequestTool : AgentTool {
                     v.jsonPrimitive.contentOrNull?.let { header(k, it) }
                 }
                 if (body != null) {
-                    if (arguments["headers"]?.jsonObject?.keys?.none { it.equals("Content-Type", true) } != false) {
-                        header("Content-Type", "application/json")
-                    }
+                    val hasContentType = arguments["headers"]?.jsonObject?.keys
+                        ?.any { it.equals("Content-Type", true) } == true
+                    if (!hasContentType) header("Content-Type", "application/json")
                     setBody(body)
                 }
             }

@@ -70,6 +70,9 @@ interface ChatDao {
     @Query("UPDATE messages SET content = :content WHERE id = :id")
     suspend fun updateMessageContent(id: Long, content: String)
 
+    @Query("DELETE FROM messages WHERE id = :id")
+    suspend fun deleteMessage(id: Long)
+
     @Query("UPDATE sessions SET updatedAt = :ts WHERE id = :id")
     suspend fun touchSession(id: Long, ts: Long = System.currentTimeMillis())
 

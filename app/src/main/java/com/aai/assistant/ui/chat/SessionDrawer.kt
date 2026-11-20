@@ -13,10 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aai.assistant.ui.components.aaiIcon
+import com.aai.assistant.ui.components.AaiIcons
 import com.aai.assistant.data.db.SessionEntity
 import com.aai.assistant.ui.components.AgentAvatar
 import com.aai.assistant.ui.theme.AgentGradient
@@ -92,8 +90,7 @@ fun SessionDrawer(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Add,
+                Icon(aaiIcon(AaiIcons.Add),
                     contentDescription = null,
                     tint = androidx.compose.ui.graphics.Color(0xFF07090F),
                     modifier = Modifier.size(20.dp)
@@ -142,16 +139,14 @@ fun SessionDrawer(
                         renameTarget = session
                         renameText = session.title
                     }, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Edit,
+                        Icon(aaiIcon(AaiIcons.Edit),
                             contentDescription = "Переименовать",
                             tint = TextMuted,
                             modifier = Modifier.size(17.dp)
                         )
                     }
                     IconButton(onClick = { deleteTarget = session }, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Delete,
+                        Icon(aaiIcon(AaiIcons.Delete),
                             contentDescription = "Удалить",
                             tint = TextMuted,
                             modifier = Modifier.size(17.dp)

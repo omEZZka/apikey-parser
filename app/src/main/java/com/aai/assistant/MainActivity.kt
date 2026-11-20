@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = { showSettings = true },
                             onSend = { text, images -> chatVm.send(text, images) },
                             onStop = chatVm::stop,
+                            onContinue = chatVm::continueRun,
                             onMinimize = {
                                 if (Settings.canDrawOverlays(context)) {
                                     ContextCompat.startForegroundService(

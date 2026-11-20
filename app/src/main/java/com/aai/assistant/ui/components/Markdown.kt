@@ -18,9 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -259,7 +256,7 @@ fun CodeBlock(language: String, code: String) {
                 modifier = Modifier.size(30.dp)
             ) {
                 Icon(
-                    if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                    aaiIcon(if (copied) AaiIcons.Check else AaiIcons.Copy),
                     contentDescription = "Копировать код",
                     tint = if (copied) AccentGreen else TextSecondary,
                     modifier = Modifier.size(15.dp)

@@ -21,8 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +40,8 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.aai.assistant.ui.components.aaiIcon
+import com.aai.assistant.ui.components.AaiIcons
 import com.aai.assistant.MainActivity
 import com.aai.assistant.R
 import com.aai.assistant.ui.theme.AaiTheme
@@ -83,6 +83,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
 
     override fun onCreate() {
         super.onCreate()
+        savedStateController.performAttach()
         savedStateController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -143,10 +144,11 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
 
     private fun showBubble() {
         if (bubbleView != null) return
-        val view = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(this@OverlayService)
-            setViewTreeViewModelStoreOwner(this@OverlayService)
-            setViewTreeSavedStateRegistryOwner(this@OverlayService)
+        val view = ComposeView(this)
+        view.setViewTreeLifecycleOwner(this@OverlayService)
+        view.setViewTreeViewModelStoreOwner(this@OverlayService)
+        view.setViewTreeSavedStateRegistryOwner(this@OverlayService)
+        view.apply {
             setContent {
                 AaiTheme {
                     Box(
@@ -157,8 +159,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                             .background(androidx.compose.ui.graphics.Color(0xFF2A2450)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.SmartToy,
+                        Icon(aaiIcon(AaiIcons.Robot),
                             contentDescription = "aAi ассистент",
                             tint = androidx.compose.ui.graphics.Color(0xFF8B7CFF),
                             modifier = Modifier.size(30.dp)

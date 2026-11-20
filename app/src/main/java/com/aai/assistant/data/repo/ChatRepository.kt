@@ -66,12 +66,11 @@ class ChatRepository(
     }
 
     fun launchAgentTurn(sessionId: Long, userText: String?, images: List<String> = emptyList()): Job {
-        val job = scope.launch {
-            synchronized(runningSessions) {
-                if (sessionId in runningSessions) return@launch
-                runningSessions.add(sessionId)
-                sessionJobs[sessionId] = requireNotNull(coroutineContext[Job])
-            }
+        synchronized(runningSessions) {
+            if (sessionId in runningSessions) return Job().apply { complete() }
+            runningSessions.add(sessionId)
+        }
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
                 if (userText != null || images.isNotEmpty()) {
                     val text = userText.orEmpty()
@@ -92,18 +91,24 @@ class ChatRepository(
                 }
                 agentLoop(sessionId)
             } catch (e: CancellationException) {
-                withContext(NonCancellable) {
-                    dao.insertMessage(
-                        MessageEntity(
-                            sessionId = sessionId,
-                            role = "error",
-                            content = "⏹ Агент остановлен пользователем. Отправь сообщение, чтобы продолжить.",
-                            isError = true
+                if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                    val msg = "Превышено время ожидания ответа модели. Попробуй ещё раз."
+                    dao.insertMessage(MessageEntity(sessionId = sessionId, role = "error", content = msg, isError = true))
+                    _events.emit(AgentEvent.Failed(sessionId, msg))
+                } else {
+                    withContext(NonCancellable) {
+                        dao.insertMessage(
+                            MessageEntity(
+                                sessionId = sessionId,
+                                role = "error",
+                                content = "⏹ Агент остановлен пользователем. Нажми «Продолжить» или отправь сообщение.",
+                                isError = true
+                            )
                         )
-                    )
-                    _events.emit(AgentEvent.Stopped(sessionId))
+                        _events.emit(AgentEvent.Stopped(sessionId))
+                    }
+                    throw e
                 }
-                throw e
             } catch (e: Exception) {
                 val msg = e.message ?: e.javaClass.simpleName
                 dao.insertMessage(MessageEntity(sessionId = sessionId, role = "error", content = msg, isError = true))
@@ -118,6 +123,8 @@ class ChatRepository(
                 }
             }
         }
+        synchronized(runningSessions) { sessionJobs[sessionId] = job }
+        job.start()
         return job
     }
 
@@ -162,15 +169,24 @@ class ChatRepository(
             )
             var streamedText = ""
             var result: com.aai.assistant.domain.AgentResult? = null
-            client.streamCompletion(settings, history, toolRegistry.specs).collect { event ->
-                when (event) {
-                    is StreamEvent.TextDelta -> {
-                        streamedText += event.text
-                        dao.updateMessageContent(assistantMsgId, streamedText)
-                        _events.emit(AgentEvent.AssistantDelta(sessionId, assistantMsgId, streamedText))
+            try {
+                client.streamCompletion(settings, history, toolRegistry.specs).collect { event ->
+                    when (event) {
+                        is StreamEvent.TextDelta -> {
+                            streamedText += event.text
+                            dao.updateMessageContent(assistantMsgId, streamedText)
+                            _events.emit(AgentEvent.AssistantDelta(sessionId, assistantMsgId, streamedText))
+                        }
+                        is StreamEvent.Completed -> result = event.result
                     }
-                    is StreamEvent.Completed -> result = event.result
                 }
+            } catch (e: CancellationException) {
+                if (e !is kotlinx.coroutines.TimeoutCancellationException) {
+                    withContext(NonCancellable) {
+                        if (streamedText.isBlank()) dao.deleteMessage(assistantMsgId)
+                    }
+                }
+                throw e
             }
             val completed = result ?: throw IllegalStateException("Поток завершился без результата")
             if (completed.content != streamedText) {

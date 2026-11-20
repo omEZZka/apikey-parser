@@ -79,7 +79,10 @@ class AgentAccessibilityService : AccessibilityService(), AgentAccessibilityAcce
             return "Текст введён через ACTION_SET_TEXT (${text.length} символов)"
         }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("aai", text))
+        android.os.Handler(mainLooper).post {
+            clipboard.setPrimaryClip(ClipData.newPlainText("aai", text))
+        }
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(150) }
         val pasted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
         return if (pasted) "Текст вставлен через буфер обмена (fallback)"
         else "Ошибка: поле блокирует и SET_TEXT, и PASTE"

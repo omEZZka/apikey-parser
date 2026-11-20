@@ -45,6 +45,7 @@ class ScreenStateParser(private val service: AccessibilityService) {
         }
         ScreenNodeRegistry.replace(nodeMap.toMap())
         val pkg = root?.packageName?.toString() ?: "unknown"
+        runCatching { root?.recycle() }
         val result = buildJsonObject {
             put("package", pkg)
             put("element_count", elements.size)
@@ -54,6 +55,7 @@ class ScreenStateParser(private val service: AccessibilityService) {
     }
 
     private fun walk(node: AccessibilityNodeInfo, array: kotlinx.serialization.json.JsonArrayBuilder) {
+        if (counter >= 400) return
         val text = node.text?.toString()?.trim().orEmpty()
         val desc = node.contentDescription?.toString()?.trim().orEmpty()
         val viewId = node.viewIdResourceName?.substringAfterLast('/')?.trim().orEmpty()
@@ -107,22 +109,24 @@ object ScreenNodeRegistry {
 suspend fun dispatchGestureAsync(
     service: AccessibilityService,
     gesture: GestureDescription
-): Boolean = suspendCancellableCoroutine { cont ->
-    val dispatched = service.dispatchGesture(
-        gesture,
-        object : AccessibilityService.GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription?) {
-                if (cont.isActive) cont.resume(true)
-            }
+): Boolean = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+    suspendCancellableCoroutine { cont ->
+        val dispatched = service.dispatchGesture(
+            gesture,
+            object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
 
-            override fun onCancelled(gestureDescription: GestureDescription?) {
-                if (cont.isActive) cont.resume(false)
-            }
-        },
-        null
-    )
-    if (!dispatched && cont.isActive) cont.resume(false)
-}
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
+            },
+            null
+        )
+        if (!dispatched && cont.isActive) cont.resume(false)
+    }
+} ?: false
 
 fun clickGesture(x: Float, y: Float, durationMs: Long): GestureDescription {
     val path = Path().apply { moveTo(x, y) }

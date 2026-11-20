@@ -123,6 +123,15 @@ class ChatViewModel : ViewModel() {
         _state.value.activeSessionId?.let { repo.stopAgent(it) }
     }
 
+    fun continueRun() {
+        val sessionId = _state.value.activeSessionId ?: return
+        if (repo.isRunning(sessionId)) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isRunning = true, error = null)
+            repo.continueAgent(sessionId)
+        }
+    }
+
     fun clearError() {
         _state.value = _state.value.copy(error = null)
     }

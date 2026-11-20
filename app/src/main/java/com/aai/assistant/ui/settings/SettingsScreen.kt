@@ -25,19 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Accessibility
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -66,6 +53,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aai.assistant.ui.components.aaiIcon
+import com.aai.assistant.ui.components.AaiIcons
 import com.aai.assistant.data.prefs.AgentSettings
 import com.aai.assistant.tools.ScreenBridge
 import com.aai.assistant.ui.theme.AccentAmber
@@ -104,7 +93,7 @@ fun SettingsScreen(
                 title = { Text("Настройки", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(aaiIcon(AaiIcons.Back), contentDescription = "Назад")
                     }
                 },
                 actions = {
@@ -118,7 +107,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            if (state.saved) Icons.Default.Check else Icons.Default.Save,
+                            aaiIcon(if (state.saved) AaiIcons.Check else AaiIcons.Save),
                             contentDescription = null,
                             tint = Color(0xFF07090F),
                             modifier = Modifier.size(16.dp)
@@ -186,12 +175,12 @@ fun SettingsScreen(
                     onValueChange = { v -> onUpdate { it.copy(apiKey = v) } },
                     label = { Text("API Key") },
                     leadingIcon = {
-                        Icon(Icons.Default.Key, contentDescription = null, tint = TextMuted)
+                        Icon(aaiIcon(AaiIcons.Key), contentDescription = null, tint = TextMuted)
                     },
                     trailingIcon = {
                         IconButton(onClick = { keyVisible = !keyVisible }) {
                             Icon(
-                                if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                aaiIcon(if (keyVisible) AaiIcons.VisibilityOff else AaiIcons.Visibility),
                                 contentDescription = "Показать ключ",
                                 tint = TextMuted
                             )
@@ -220,8 +209,7 @@ fun SettingsScreen(
                             color = AccentAmber
                         )
                     } else {
-                        Icon(
-                            Icons.Default.Bolt,
+                        Icon(aaiIcon(AaiIcons.Bolt),
                             contentDescription = null,
                             tint = AccentAmber,
                             modifier = Modifier.size(18.dp)
@@ -266,8 +254,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     } else {
-                        Icon(
-                            Icons.Default.Refresh,
+                        Icon(aaiIcon(AaiIcons.Refresh),
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
@@ -324,8 +311,7 @@ fun SettingsScreen(
                                     else MaterialTheme.colorScheme.onSurface
                                 )
                                 if (active) {
-                                    Icon(
-                                        Icons.Default.CheckCircle,
+                                    Icon(aaiIcon(AaiIcons.Check),
                                         contentDescription = null,
                                         tint = AccentGreen,
                                         modifier = Modifier.size(16.dp)
@@ -423,7 +409,7 @@ fun SettingsScreen(
 
             SectionCard(title = "Разрешения", subtitle = "Нужны для управления устройством") {
                 PermissionRow(
-                    icon = Icons.Default.Accessibility,
+                    icon = AaiIcons.Accessibility,
                     title = "Специальные возможности",
                     subtitle = if (ScreenBridge.isConnected()) "Подключено — агент видит экран"
                     else "Выключено — UI-инструменты не работают",
@@ -435,7 +421,7 @@ fun SettingsScreen(
                     )
                 }
                 PermissionRow(
-                    icon = Icons.Default.Layers,
+                    icon = AaiIcons.Layers,
                     title = "Поверх других приложений",
                     subtitle = "Плавающий мини-чат и кнопка ассистента",
                     ok = Settings.canDrawOverlays(context)
@@ -448,7 +434,7 @@ fun SettingsScreen(
                     )
                 }
                 PermissionRow(
-                    icon = Icons.Default.Folder,
+                    icon = AaiIcons.Folder,
                     title = "Доступ ко всем файлам",
                     subtitle = "MANAGE_EXTERNAL_STORAGE для file_* инструментов",
                     ok = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
@@ -527,7 +513,7 @@ private fun Field(
 
 @Composable
 private fun PermissionRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: Int,
     title: String,
     subtitle: String,
     ok: Boolean,
@@ -552,7 +538,7 @@ private fun PermissionRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                icon,
+                aaiIcon(icon),
                 contentDescription = null,
                 tint = if (ok) AccentGreen else AccentAmber,
                 modifier = Modifier.size(19.dp)

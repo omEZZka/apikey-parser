@@ -47,31 +47,37 @@ class OverlayPanelHost(
     override val viewModelStore: ViewModelStore get() = store
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
 
-    val view: ComposeView = ComposeView(context).apply {
-        setViewTreeLifecycleOwner(this@OverlayPanelHost)
-        setViewTreeViewModelStoreOwner(this@OverlayPanelHost)
-        setViewTreeSavedStateRegistryOwner(this@OverlayPanelHost)
-        setContent {
-            AaiTheme {
-                val state by stateFlow.collectAsState()
-                val compact by compactFlow.collectAsState()
-                MiniChatPanel(
-                    state = state,
-                    compact = compact,
-                    onToggleCompact = onToggleCompact,
-                    onSend = { text, images -> send(text, images) },
-                    onStop = { stateFlow.value.activeSessionId?.let { repo.stopAgent(it) } },
-                    onClose = onClose,
-                    onDrag = onDrag,
-                    onOpenApp = onOpenApp
-                )
+    val view: ComposeView = ComposeView(context)
+
+    private fun initContent() {
+        view.apply {
+            setViewTreeLifecycleOwner(this@OverlayPanelHost)
+            setViewTreeViewModelStoreOwner(this@OverlayPanelHost)
+            setViewTreeSavedStateRegistryOwner(this@OverlayPanelHost)
+            setContent {
+                AaiTheme {
+                    val state by stateFlow.collectAsState()
+                    val compact by compactFlow.collectAsState()
+                    MiniChatPanel(
+                        state = state,
+                        compact = compact,
+                        onToggleCompact = onToggleCompact,
+                        onSend = { text, images -> send(text, images) },
+                        onStop = { stateFlow.value.activeSessionId?.let { repo.stopAgent(it) } },
+                        onClose = onClose,
+                        onDrag = onDrag,
+                        onOpenApp = onOpenApp
+                    )
+                }
             }
         }
     }
 
     init {
+        savedStateController.performAttach()
         savedStateController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        initContent()
         scope.launch {
             repo.observeSessions().collect { list ->
                 if (stateFlow.value.activeSessionId == null) {

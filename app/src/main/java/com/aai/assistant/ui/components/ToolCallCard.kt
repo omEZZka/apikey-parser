@@ -15,11 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +51,8 @@ private fun toolLabel(name: String): String = when (name) {
     "http_request" -> "HTTP-запрос"
     "web_search" -> "Поиск в интернете"
     "web_read" -> "Чтение страницы"
+    "wait" -> "Пауза"
+    "clipboard" -> "Буфер обмена"
     "run_shell" -> "Shell-команда"
     "file_read" -> "Чтение файла"
     "file_write" -> "Запись файла"
@@ -105,7 +102,7 @@ fun ToolCallCard(
                     )
                 } else {
                     Icon(
-                        if (isError) Icons.Default.Close else Icons.Default.Check,
+                        aaiIcon(if (isError) AaiIcons.Close else AaiIcons.Check),
                         contentDescription = null,
                         tint = statusColor,
                         modifier = Modifier.size(16.dp)
@@ -140,7 +137,7 @@ fun ToolCallCard(
             )
             Spacer(Modifier.width(4.dp))
             Icon(
-                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                aaiIcon(if (expanded) AaiIcons.ExpandLess else AaiIcons.ExpandMore),
                 contentDescription = if (expanded) "Свернуть" else "Развернуть",
                 tint = TextMuted,
                 modifier = Modifier.size(20.dp)

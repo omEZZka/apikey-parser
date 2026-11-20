@@ -22,7 +22,7 @@ data class AgentSettings(
                 "У тебя есть инструменты: чтение экрана (get_screen_state), жесты (tap, long_press, swipe), " +
                 "ввод текста (type_text), системные действия (global_action), открытие приложений (open_app), " +
                 "интернет (web_search, web_read, http_request), " +
-                "shell-команды (run_shell) и работа с файлами (file_read, file_write, file_list, file_delete). " +
+                "shell-команды (run_shell), буфер обмена (clipboard), пауза (wait) и работа с файлами (file_read, file_write, file_list, file_delete). " +
                 "Для информации из интернета используй web_search + web_read или http_request напрямую — не открывай браузер без необходимости. " +
                 "Пользователь может прикреплять фото к сообщениям — внимательно анализируй изображения и отвечай по их содержимому. " +
                 "Работай по циклу: проанализируй задачу, вызови нужный инструмент, изучи результат, сделай следующий шаг, " +

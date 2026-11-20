@@ -32,13 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.UnfoldLess
-import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +54,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aai.assistant.ui.components.aaiIcon
+import com.aai.assistant.ui.components.AaiIcons
 import com.aai.assistant.data.db.MessageEntity
 import com.aai.assistant.data.media.ImageImporter
 import com.aai.assistant.ui.chat.ChatUiState
@@ -169,8 +164,7 @@ fun MiniChatPanel(
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Stop,
+                        Icon(aaiIcon(AaiIcons.Stop),
                             contentDescription = "Стоп",
                             tint = Color(0xFF2B0B0B),
                             modifier = Modifier.size(13.dp)
@@ -187,13 +181,13 @@ fun MiniChatPanel(
                 Spacer(Modifier.width(6.dp))
             }
             MiniHeaderButton(
-                icon = if (compact) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                icon = if (compact) AaiIcons.UnfoldMore else AaiIcons.UnfoldLess,
                 description = if (compact) "Развернуть историю" else "Свернуть в таблетку",
                 onClick = onToggleCompact
             )
             Spacer(Modifier.width(4.dp))
             MiniHeaderButton(
-                icon = Icons.Default.Close,
+                icon = AaiIcons.Close,
                 description = "Закрыть мини-чат",
                 onClick = onClose
             )
@@ -271,8 +265,7 @@ fun MiniChatPanel(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Close,
+                            Icon(aaiIcon(AaiIcons.Close),
                                 contentDescription = "Убрать",
                                 tint = Color.White,
                                 modifier = Modifier.size(11.dp)
@@ -304,8 +297,7 @@ fun MiniChatPanel(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.AttachFile,
+                Icon(aaiIcon(AaiIcons.Attach),
                     contentDescription = "Прикрепить фото",
                     tint = if (attachedImages.isNotEmpty()) MaterialTheme.colorScheme.primary else TextMuted,
                     modifier = Modifier.size(18.dp)
@@ -357,8 +349,7 @@ fun MiniChatPanel(
                         color = AccentAmber
                     )
                 } else {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
+                    Icon(aaiIcon(AaiIcons.Send),
                         contentDescription = "Отправить",
                         tint = if (canSend) Color(0xFF0B0716) else TextMuted,
                         modifier = Modifier.size(16.dp)
@@ -371,7 +362,7 @@ fun MiniChatPanel(
 
 @Composable
 private fun MiniHeaderButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: Int,
     description: String,
     onClick: () -> Unit
 ) {
@@ -384,7 +375,7 @@ private fun MiniHeaderButton(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            icon,
+            aaiIcon(icon),
             contentDescription = description,
             tint = TextMuted,
             modifier = Modifier.size(15.dp)

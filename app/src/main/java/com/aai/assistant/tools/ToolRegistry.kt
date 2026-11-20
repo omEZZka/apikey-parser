@@ -16,6 +16,8 @@ class ToolRegistry(context: Context) {
         HttpRequestTool(),
         WebSearchTool(),
         WebReadTool(),
+        WaitTool(),
+        ClipboardTool(context.applicationContext),
         RunShellTool(),
         FileReadTool(),
         FileWriteTool(),
