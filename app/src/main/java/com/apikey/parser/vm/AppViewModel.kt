@@ -219,7 +219,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return SmartImportReport(created, added, dup, providerNames.distinct())
     }
 
-    fun bruteForce(providerIds: List<String>, charset: String, length: Int, prefix: String, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+    fun bruteForce(providerIds: List<String>, charset: String, length: Int, prefix: String, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onAttempt: (String) -> Unit, onDone: () -> Unit) {
         val providers = _state.value.providers.filter { it.id in providerIds }
         if (providers.isEmpty() || charset.isEmpty() || length <= 0) { onDone(); return }
         val chars = charset.toList()
@@ -256,6 +256,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 sem.acquire()
                                 try {
                                     val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
+                                    onAttempt(cand)
                                     if (ok) { addKey(p.id, cand, "bruteforce"); onFound(cand, p.name) }
                                 } finally { sem.release() }
                             }
@@ -270,7 +271,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun testCandidates(providerIds: List<String>, candidates: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+    fun testCandidates(providerIds: List<String>, candidates: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onAttempt: (String) -> Unit, onDone: () -> Unit) {
         val providers = _state.value.providers.filter { it.id in providerIds }
         viewModelScope.launch {
             val total = candidates.size * providers.size
@@ -278,6 +279,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             for (p in providers) {
                 for (c in candidates) {
                     val (ok, _) = api.validateKey(p.baseUrl, c, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
+                    onAttempt(c)
                     count++
                     onProgress(count, total, p.name)
                     if (ok) { addKey(p.id, c, "import"); onFound(c, p.name) }
@@ -303,7 +305,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.joinToString("")
     }
 
-    fun bruteForcePattern(providerIds: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+    fun bruteForcePattern(providerIds: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onAttempt: (String) -> Unit, onDone: () -> Unit) {
         val providers = _state.value.providers.filter { it.id in providerIds }
         viewModelScope.launch {
             for (p in providers) {
@@ -344,6 +346,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 sem.acquire()
                                 try {
                                     val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
+                                    onAttempt(cand)
                                     if (ok) { addKey(p.id, cand, "pattern"); onFound(cand, p.name) }
                                 } finally { sem.release() }
                             }

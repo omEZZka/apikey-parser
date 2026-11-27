@@ -24,6 +24,7 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
     var progress by remember { mutableStateOf(0 to 0) }
     var current by remember { mutableStateOf("") }
     var found by remember { mutableStateOf(listOf<String>()) }
+    var attempts by remember { mutableStateOf(listOf<String>()) }
     var running by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -68,30 +69,63 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             LinearProgressIndicator(progress = if (progress.second > 0) progress.first.toFloat() / progress.second else 0f, modifier = Modifier.fillMaxWidth())
             Text("Прогресс: ${progress.first}/${progress.second}  $current", style = MaterialTheme.typography.bodySmall)
-            Text("Найдено: ${found.size}", style = MaterialTheme.typography.bodySmall)
-            found.takeLast(10).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutputColumn(
+                    title = "Удачные (${found.size})",
+                    items = found,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                OutputColumn(
+                    title = "Перебрано (${attempts.size})",
+                    items = attempts,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Button(
                 enabled = !running && selected.isNotEmpty(),
                 onClick = {
-                    running = true; found = emptyList(); progress = 0 to 0
+                    running = true; found = emptyList(); attempts = emptyList(); progress = 0 to 0
                     when (mode) {
                         0 -> vm.bruteForce(selected.toList(), charset, length.toIntOrNull() ?: 4, prefix,
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
+                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
                             onDone = { running = false })
                         1 -> vm.testCandidates(selected.toList(), dict.lines().map { it.trim() }.filter { it.isNotBlank() },
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
+                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
                             onDone = { running = false })
                         else -> vm.bruteForcePattern(selected.toList(),
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
+                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
                             onDone = { running = false })
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (running) "Работает..." else "Старт") }
+        }
+    }
+}
+
+@Composable
+private fun OutputColumn(title: String, items: List<String>, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    Column(modifier) {
+        Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = color)
+        Spacer(Modifier.height(4.dp))
+        Surface(Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 220.dp), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+            Column(Modifier.padding(6.dp).verticalScroll(rememberScrollState())) {
+                if (items.isEmpty()) {
+                    Text("—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    items.asReversed().forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
         }
     }
 }
