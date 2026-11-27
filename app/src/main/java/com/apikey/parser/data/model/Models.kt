@@ -10,7 +10,11 @@ data class Provider(
     val baseUrl: String,
     val docsUrl: String? = null,
     val keyExample: String? = null,
-    val keyTemplate: String? = null
+    val keyTemplate: String? = null,
+    val modelsPath: String? = null,
+    val authHeader: String? = null,
+    val authPrefix: String? = null,
+    val profileId: String? = null
 )
 
 @Serializable

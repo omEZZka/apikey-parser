@@ -3,7 +3,9 @@ package com.apikey.parser.data.store
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.apikey.parser.data.model.ApiKey
 import com.apikey.parser.data.model.AppState
+import com.apikey.parser.data.model.Provider
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -18,7 +20,11 @@ class Store(context: Context) {
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = false
+        encodeDefaults = true
+    }
 
     fun load(): AppState {
         val raw = prefs.getString("state", null) ?: return AppState()
@@ -27,5 +33,12 @@ class Store(context: Context) {
 
     fun save(state: AppState) {
         prefs.edit().putString("state", json.encodeToString(AppState.serializer(), state)).apply()
+    }
+
+    fun addManualKey(provider: Provider, key: ApiKey) {
+        val s = load()
+        val newProvider = if (s.providers.none { it.id == provider.id }) s.providers + provider else s.providers
+        val newKeys = s.keys.filterNot { it.key == key.key && it.providerId == key.providerId } + key
+        save(s.copy(providers = newProvider, keys = newKeys))
     }
 }
