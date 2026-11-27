@@ -28,15 +28,15 @@ class Api {
             "$base/redoc", "$base/api-docs", "$base/api/keys"
         )
         val patterns = listOf(
-            Regex("sk-[A-Za-z0-9_\-]{10,}"),
-            Regex("gsk_[A-Za-z0-9_\-]{10,}"),
+            Regex("sk-[A-Za-z0-9_-]{10,}"),
+            Regex("gsk_[A-Za-z0-9_-]{10,}"),
             Regex("ghp_[A-Za-z0-9]{10,}"),
             Regex("AIza[0-9A-Za-z_\-]{10,}"),
-            Regex("xai-[A-Za-z0-9_\-]{10,}"),
+            Regex("xai-[A-Za-z0-9_-]{10,}"),
             Regex("r8_[A-Za-z0-9]{10,}"),
-            Regex("key-[A-Za-z0-9_\-]{10,}")
+            Regex("key-[A-Za-z0-9_-]{10,}")
         )
-        val generic = Regex("(?i)(api[_-]?key|token|secret|bearer)[^\n]{0,60}?([A-Za-z0-9_\-]{16,})")
+        val generic = Regex("(?i)(api[_-]?key|token|secret|bearer)[^\n]{0,60}?([A-Za-z0-9_-]{16,})")
         for (u in candidates) {
             val t = fetchText(u) ?: continue
             for (p in patterns) {

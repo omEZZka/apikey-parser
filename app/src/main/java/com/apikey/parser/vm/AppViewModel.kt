@@ -141,19 +141,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     if (batch.isEmpty()) break
                     val currentBatch = batch.toList()
-                    val jobs = currentBatch.map { cand ->
-                        kotlinx.coroutines.async {
-                            sem.acquire()
-                            try {
-                                val (ok, _) = api.validateKey(p.baseUrl, cand)
-                                if (ok) {
-                                    addKey(p.id, cand, "bruteforce")
-                                    onFound(cand, p.name)
-                                }
-                            } finally { sem.release() }
+                    kotlinx.coroutines.coroutineScope {
+                        val jobs = currentBatch.map { cand ->
+                            async {
+                                sem.acquire()
+                                try {
+                                    val (ok, _) = api.validateKey(p.baseUrl, cand)
+                                    if (ok) {
+                                        addKey(p.id, cand, "bruteforce")
+                                        onFound(cand, p.name)
+                                    }
+                                } finally { sem.release() }
+                            }
                         }
+                        jobs.awaitAll()
                     }
-                    jobs.awaitAll()
                     count += currentBatch.size
                     onProgress(count, total, p.name)
                 }
