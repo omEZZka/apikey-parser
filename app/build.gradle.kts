@@ -2,42 +2,25 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
-    id("com.google.devtools.ksp")
 }
 
 android {
-    namespace = "com.aai.assistant"
+    namespace = "com.apikey.parser"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.aai.assistant"
+        applicationId = "com.apikey.parser"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
-    }
-
-    signingConfigs {
-        val stableKey = rootProject.file("ci-debug.keystore")
-        if (stableKey.exists()) {
-            create("stableDebug") {
-                storeFile = stableKey
-                storePassword = "aai12345"
-                keyAlias = "aai"
-                keyPassword = "aai12345"
-            }
-        }
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
         }
-        debug {
-            if (rootProject.file("ci-debug.keystore").exists()) {
-                signingConfig = signingConfigs.getByName("stableDebug")
-            }
-        }
+        debug { }
     }
 
     compileOptions {
@@ -58,9 +41,7 @@ android {
         resources.excludes += setOf(
             "META-INF/*.kotlin_module",
             "META-INF/AL2.0",
-            "META-INF/LGPL2.1",
-            "META-INF/INDEX.LIST",
-            "META-INF/io.netty.versions.properties"
+            "META-INF/LGPL2.1"
         )
     }
 }
@@ -71,25 +52,14 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.3")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
-    implementation("io.ktor:ktor-client-core:2.3.12")
-    implementation("io.ktor:ktor-client-okhttp:2.3.12")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
