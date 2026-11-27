@@ -132,10 +132,9 @@ class Api {
     }
 
     private fun summarizeBalance(body: String): String {
-        return try {
-            val el = Json.parseToJsonElement(body)
-            val keys = listOf("balance", "credits", "credit", "total_credits", "remaining", "available")
-            fun find(e: JsonElement): String? = when (e) {
+        val keys = listOf("balance", "credits", "credit", "total_credits", "remaining", "available")
+        fun find(e: JsonElement): String? {
+            return when (e) {
                 is JsonObject -> {
                     for (k in keys) {
                         val v = e[k]?.jsonPrimitive?.contentOrNull
@@ -146,6 +145,9 @@ class Api {
                 is JsonArray -> e.firstNotNullOfOrNull { find(it) }
                 else -> null
             }
+        }
+        return try {
+            val el = Json.parseToJsonElement(body)
             find(el) ?: body.take(160)
         } catch (e: Exception) { body.take(160) }
     }
