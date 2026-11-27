@@ -19,7 +19,7 @@ import com.apikey.parser.vm.AppViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> Unit, onBrute: (String) -> Unit, onSettings: () -> Unit, onThemes: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> Unit, onImport: () -> Unit, onBrute: () -> Unit, onSettings: () -> Unit, onThemes: () -> Unit) {
     val state by vm.state.collectAsState()
     var query by remember { mutableStateOf("") }
     val filteredKeys = state.keys.filter { k ->
@@ -38,9 +38,15 @@ fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> U
         Column(Modifier.padding(pad).padding(12.dp)) {
             OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Поиск") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAddProvider) { Text("Добавить") }
+                Button(onClick = onImport) { Text("Импорт") }
+                Button(onClick = onBrute) { Text("Подбор") }
+            }
+            Spacer(Modifier.height(8.dp))
             LazyColumn {
                 items(state.providers) { p ->
-                    ProviderHeader(p, state.keys.count { it.providerId == p.id }, { onBrute(p.id) })
+                    ProviderHeader(p, state.keys.count { it.providerId == p.id })
                 }
                 items(filteredKeys) { k ->
                     val p = state.providers.find { it.id == k.providerId }
@@ -52,16 +58,13 @@ fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> U
 }
 
 @Composable
-private fun ProviderHeader(p: Provider, count: Int, onBrute: () -> Unit) {
+private fun ProviderHeader(p: Provider, count: Int) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Column {
             Text(p.name, style = MaterialTheme.typography.titleMedium)
             Text(p.baseUrl, style = MaterialTheme.typography.bodySmall)
         }
-        Row {
-            Text("keys: $count", modifier = Modifier.padding(end = 8.dp))
-            TextButton(onClick = onBrute) { Text("Подбор") }
-        }
+        Text("keys: $count")
     }
 }
 

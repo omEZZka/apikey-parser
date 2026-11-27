@@ -5,9 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -15,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.apikey.parser.ui.screens.AddProviderScreen
 import com.apikey.parser.ui.screens.BruteForceScreen
 import com.apikey.parser.ui.screens.HomeScreen
+import com.apikey.parser.ui.screens.ImportScreen
 import com.apikey.parser.ui.screens.KeyDetailScreen
 import com.apikey.parser.ui.screens.SettingsScreen
 import com.apikey.parser.ui.screens.ThemesScreen
@@ -34,20 +32,19 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(vm,
                             onAddProvider = { nav.navigate("add") },
                             onKey = { nav.navigate("key/$it") },
-                            onBrute = { nav.navigate("brute/$it") },
+                            onImport = { nav.navigate("import") },
+                            onBrute = { nav.navigate("brute") },
                             onSettings = { nav.navigate("settings") },
                             onThemes = { nav.navigate("themes") }
                         )
                     }
                     composable("add") { AddProviderScreen(vm) { nav.popBackStack() } }
+                    composable("import") { ImportScreen(vm) { nav.popBackStack() } }
                     composable("key/{id}") { back ->
                         val id = back.arguments?.getString("id") ?: ""
                         KeyDetailScreen(vm, id) { nav.popBackStack() }
                     }
-                    composable("brute/{id}") { back ->
-                        val id = back.arguments?.getString("id") ?: ""
-                        BruteForceScreen(vm, id) { nav.popBackStack() }
-                    }
+                    composable("brute") { BruteForceScreen(vm) { nav.popBackStack() } }
                     composable("settings") { SettingsScreen(vm, { nav.popBackStack() }, { nav.navigate("themes") }) }
                     composable("themes") { ThemesScreen(vm) { nav.popBackStack() } }
                 }

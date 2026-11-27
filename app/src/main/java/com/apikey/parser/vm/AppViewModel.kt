@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -107,33 +109,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         candidates.distinct().forEach { addKey(providerId, it) }
     }
 
-    fun bruteForce(providerId: String, charset: String, length: Int, onFound: (String) -> Unit, onProgress: (Int, Int) -> Unit, onDone: () -> Unit) {
-        val p = _state.value.providers.find { it.id == providerId } ?: return
+    fun bruteForce(providerIds: List<String>, charset: String, length: Int, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+        val providers = _state.value.providers.filter { it.id in providerIds }
+        if (providers.isEmpty() || charset.isEmpty() || length <= 0) { onDone(); return }
+        val chars = charset.toList()
+        val estimated = Math.pow(chars.size.toDouble(), length.toDouble())
+        val cap = 200000
+        val total = estimated.toInt().coerceAtMost(cap)
         viewModelScope.launch {
-            val total = Math.pow(charset.length.toDouble(), length.toDouble()).toInt().coerceAtMost(Int.MAX_VALUE)
-            var count = 0
-            val sem = kotlinx.coroutines.sync.Semaphore(_state.value.concurrency.coerceAtLeast(1))
-            val jobs = mutableListOf<kotlinx.coroutines.Job>()
-            fun gen(prefix: String, remaining: Int) {
-                if (remaining == 0) {
-                    jobs += launch {
-                        sem.acquire()
-                        try {
-                            val (ok, models) = api.validateKey(p.baseUrl, prefix)
-                            count++
-                            onProgress(count, total)
-                            if (ok) {
-                                addKey(providerId, prefix, "bruteforce")
-                                onFound(prefix)
-                            }
-                        } finally { sem.release() }
+            for (p in providers) {
+                val sem = kotlinx.coroutines.sync.Semaphore(_state.value.concurrency.coerceAtLeast(1))
+                val indices = IntArray(length)
+                var hasMore = true
+                var count = 0
+                val batch = mutableListOf<String>()
+                val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 4).coerceAtMost(64)
+                while (hasMore && count < total) {
+                    batch.clear()
+                    repeat(batchSize) {
+                        if (count + batch.size >= total) return@repeat
+                        batch.add(indices.map { chars[it] }.joinToString(""))
+                        // advance odometer
+                        var pos = length - 1
+                        while (pos >= 0) {
+                            indices[pos]++
+                            if (indices[pos] < chars.size) break
+                            indices[pos] = 0
+                            pos--
+                        }
+                        if (pos < 0) { hasMore = false }
                     }
-                    return
+                    if (batch.isEmpty()) break
+                    val currentBatch = batch.toList()
+                    val jobs = currentBatch.map { cand ->
+                        kotlinx.coroutines.async {
+                            sem.acquire()
+                            try {
+                                val (ok, _) = api.validateKey(p.baseUrl, cand)
+                                if (ok) {
+                                    addKey(p.id, cand, "bruteforce")
+                                    onFound(cand, p.name)
+                                }
+                            } finally { sem.release() }
+                        }
+                    }
+                    jobs.awaitAll()
+                    count += currentBatch.size
+                    onProgress(count, total, p.name)
                 }
-                for (c in charset) gen(prefix + c, remaining - 1)
             }
-            gen("", length)
-            jobs.forEach { it.join() }
             onDone()
         }
     }

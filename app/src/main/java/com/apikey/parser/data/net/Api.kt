@@ -21,21 +21,32 @@ class Api {
     } catch (e: Exception) { null }
 
     suspend fun findKeyExample(providerBaseUrl: String): String? {
-        val base = normalize(providerBaseUrl)
-        val candidates = listOf(base, "$base/docs", "$base/api", "$base/reference", "$base/v1", "$base/openapi.json")
-        val patterns = listOf(
-            Regex("sk-[A-Za-z0-9_\\-]{10,}"),
-            Regex("gsk_[A-Za-z0-9_\\-]{10,}"),
-            Regex("ghp_[A-Za-z0-9]{10,}"),
-            Regex("AIza[0-9A-Za-z_\\-]{10,}"),
-            Regex("xai-[A-Za-z0-9_\\-]{10,}"),
-            Regex("r8_[A-Za-z0-9]{10,}")
+        val base = normalize(providerBaseUrl).removeSuffix("/v1").removeSuffix("/v1/")
+        val candidates = listOf(
+            base, "$base/", "$base/docs", "$base/api", "$base/reference",
+            "$base/v1", "$base/openapi.json", "$base/swagger.json",
+            "$base/redoc", "$base/api-docs", "$base/api/keys"
         )
+        val patterns = listOf(
+            Regex("sk-[A-Za-z0-9_\-]{10,}"),
+            Regex("gsk_[A-Za-z0-9_\-]{10,}"),
+            Regex("ghp_[A-Za-z0-9]{10,}"),
+            Regex("AIza[0-9A-Za-z_\-]{10,}"),
+            Regex("xai-[A-Za-z0-9_\-]{10,}"),
+            Regex("r8_[A-Za-z0-9]{10,}"),
+            Regex("key-[A-Za-z0-9_\-]{10,}")
+        )
+        val generic = Regex("(?i)(api[_-]?key|token|secret|bearer)[^\n]{0,60}?([A-Za-z0-9_\-]{16,})")
         for (u in candidates) {
             val t = fetchText(u) ?: continue
             for (p in patterns) {
                 val m = p.find(t)
                 if (m != null) return m.value
+            }
+            val gm = generic.find(t)
+            if (gm != null) {
+                val g = gm.groupValues.getOrElse(2) { gm.value }
+                if (g.length >= 16) return g
             }
         }
         return null
