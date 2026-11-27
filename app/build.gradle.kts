@@ -12,13 +12,29 @@ android {
         applicationId = "com.apikey.parser"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        val stableKey = rootProject.file("ci-debug.keystore")
+        if (stableKey.exists()) {
+            create("stableDebug") {
+                storeFile = stableKey
+                storePassword = "aai12345"
+                keyAlias = "aai"
+                keyPassword = "aai12345"
+            }
+        }
     }
 
     buildTypes {
         release { isMinifyEnabled = false }
-        debug { }
+        debug {
+            if (rootProject.file("ci-debug.keystore").exists()) {
+                signingConfig = signingConfigs.getByName("stableDebug")
+            }
+        }
     }
 
     compileOptions {
