@@ -31,7 +31,7 @@ class Api {
             Regex("sk-[A-Za-z0-9_-]{10,}"),
             Regex("gsk_[A-Za-z0-9_-]{10,}"),
             Regex("ghp_[A-Za-z0-9]{10,}"),
-            Regex("AIza[0-9A-Za-z_\-]{10,}"),
+            Regex("AIza[0-9A-Za-z_-]{10,}"),
             Regex("xai-[A-Za-z0-9_-]{10,}"),
             Regex("r8_[A-Za-z0-9]{10,}"),
             Regex("key-[A-Za-z0-9_-]{10,}")
