@@ -66,44 +66,38 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("Параллелизм: ${state.concurrency}", style = MaterialTheme.typography.bodySmall)
+            Slider(value = state.concurrency.toFloat(), onValueChange = { vm.setConcurrency(it.toInt()) }, valueRange = 1f..32f, steps = 30)
+            Spacer(Modifier.height(4.dp))
             LinearProgressIndicator(progress = if (progress.second > 0) progress.first.toFloat() / progress.second else 0f, modifier = Modifier.fillMaxWidth())
             Text("Прогресс: ${progress.first}/${progress.second}  $current", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutputColumn(
-                    title = "Удачные (${found.size})",
-                    items = found,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                OutputColumn(
-                    title = "Перебрано (${attempts.size})",
-                    items = attempts,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
+                OutputColumn("Удачные (${found.size})", found, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                OutputColumn("Перебрано (${progress.first})", attempts, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f))
             }
             Spacer(Modifier.height(12.dp))
             Button(
                 enabled = !running && selected.isNotEmpty(),
                 onClick = {
                     running = true; found = emptyList(); attempts = emptyList(); progress = 0 to 0
+                    val attemptCb: (String) -> Unit = { k -> attempts = (attempts + k).takeLast(120) }
                     when (mode) {
                         0 -> vm.bruteForce(selected.toList(), charset, length.toIntOrNull() ?: 4, prefix,
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
-                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
+                            onAttempt = attemptCb,
                             onDone = { running = false })
                         1 -> vm.testCandidates(selected.toList(), dict.lines().map { it.trim() }.filter { it.isNotBlank() },
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
-                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
+                            onAttempt = attemptCb,
                             onDone = { running = false })
                         else -> vm.bruteForcePattern(selected.toList(),
                             onFound = { k, _ -> found = found + k },
                             onProgress = { a, b, n -> progress = a to b; current = n },
-                            onAttempt = { k -> attempts = (attempts + k).takeLast(200) },
+                            onAttempt = attemptCb,
                             onDone = { running = false })
                     }
                 },

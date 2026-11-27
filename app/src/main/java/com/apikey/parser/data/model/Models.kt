@@ -38,6 +38,6 @@ data class AppState(
     val themeIndex: Int = 0,
     val language: String = "ru",
     val balanceThreshold: Double = 1.0,
-    val concurrency: Int = 4,
+    val concurrency: Int = 12,
     val autoRefreshMinutes: Int = 30
 )

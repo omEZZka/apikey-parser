@@ -143,6 +143,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
+    override fun onCleared() {
+        super.onCleared()
+    }
+
     fun importKeys(providerId: String, text: String) {
         val p = _state.value.providers.find { it.id == providerId } ?: return
         val candidates = smartKeys(p, text)
@@ -233,7 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 var hasMore = true
                 var count = 0
                 val batch = mutableListOf<String>()
-                val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 4).coerceAtMost(64)
+                val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 8).coerceAtMost(128)
                 while (hasMore && count < total) {
                     batch.clear()
                     repeat(batchSize) {
@@ -256,8 +260,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 sem.acquire()
                                 try {
                                     val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                                    onAttempt(cand)
-                                    if (ok) { addKey(p.id, cand, "bruteforce"); onFound(cand, p.name) }
+                                    if (ok) { addKey(p.id, cand, "bruteforce"); onFound(cand, p.name); onAttempt(cand) }
+                                    else if (java.util.concurrent.ThreadLocalRandom.current().nextInt(12) == 0) onAttempt(cand)
                                 } finally { sem.release() }
                             }
                         }
@@ -279,7 +283,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             for (p in providers) {
                 for (c in candidates) {
                     val (ok, _) = api.validateKey(p.baseUrl, c, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                    onAttempt(c)
+                    if (ok) onAttempt(c)
                     count++
                     onProgress(count, total, p.name)
                     if (ok) { addKey(p.id, c, "import"); onFound(c, p.name) }
@@ -323,7 +327,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val sem = Semaphore(_state.value.concurrency.coerceAtLeast(1))
                 while (hasMore && count < total && count < cap) {
                     val batch = mutableListOf<String>()
-                    val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 4).coerceAtMost(64)
+                    val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 8).coerceAtMost(128)
                     repeat(batchSize) {
                         if (count + batch.size >= total || count + batch.size >= cap) return@repeat
                         val candChars = keys[0].toCharArray()
@@ -346,8 +350,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 sem.acquire()
                                 try {
                                     val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                                    onAttempt(cand)
-                                    if (ok) { addKey(p.id, cand, "pattern"); onFound(cand, p.name) }
+                                    if (ok) { addKey(p.id, cand, "pattern"); onFound(cand, p.name); onAttempt(cand) }
+                                    else if (java.util.concurrent.ThreadLocalRandom.current().nextInt(12) == 0) onAttempt(cand)
                                 } finally { sem.release() }
                             }
                         }

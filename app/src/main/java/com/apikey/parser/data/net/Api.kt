@@ -1,21 +1,39 @@
 package com.apikey.parser.data.net
 
 import com.apikey.parser.data.model.ProviderCatalog
-import com.apikey.parser.data.model.ProviderProfile
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.*
+import java.util.concurrent.ConcurrentHashMap
 
 class Api {
     private val client = HttpClient(OkHttp) {
+        engine {
+            config {
+                dispatcher(okhttp3.Dispatcher().apply {
+                    maxRequests = 64
+                    maxRequestsPerHost = 16
+                })
+            }
+        }
         install(ContentNegotiation) { json() }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 5_000
+            requestTimeoutMillis = 12_000
+            socketTimeoutMillis = 12_000
+        }
         expectSuccess = false
     }
+
+    private data class CacheEntry(val valid: Boolean, val models: List<String>, val at: Long)
+    private val cache = ConcurrentHashMap<String, CacheEntry>()
+    private val cacheTtl = 10 * 60 * 1000L
 
     private fun normalize(base: String): String = base.trim().trimEnd('/')
 
@@ -28,9 +46,7 @@ class Api {
         val profile = ProviderCatalog.detectByUrl(base)
         val candidates = buildList {
             profile?.docsUrl?.let { add(it) }
-            add(base); add("$base/"); add("$base/docs"); add("$base/api")
-            add("$base/reference"); add("$base/v1"); add("$base/openapi.json")
-            add("$base/swagger.json"); add("$base/redoc"); add("$base/api-docs")
+            add(base); add("$base/docs"); add("$base/openapi.json"); add("$base/swagger.json")
         }.distinct()
         val generic = Regex("(?i)(api[_-]?key|token|secret|bearer)[^\\n]{0,60}?([A-Za-z0-9_\\-]{16,})")
         for (u in candidates) {
@@ -57,33 +73,44 @@ class Api {
         profileId: String? = null
     ): Pair<Boolean, List<String>> {
         val base = normalize(baseUrl)
+        val cacheKey = "$base|$key"
+        val cached = cache[cacheKey]
+        if (cached != null && System.currentTimeMillis() - cached.at < cacheTtl) {
+            return cached.valid to cached.models
+        }
+
         val profile = profileId?.let { id -> ProviderCatalog.profiles.find { it.id == id } }
             ?: ProviderCatalog.detectByUrl(base) ?: ProviderCatalog.detectByKey(key)
-        val paths = linkedSetOf<String>()
-        modelsPath?.let { paths.add(it) }
-        profile?.modelsPath?.let { paths.add(it) }
-        paths.add("/v1/models"); paths.add("/models"); paths.add("/v1/model/list")
-        val headers = buildList {
-            if (authHeader != null) add(authHeader to ((authPrefix ?: "") + key))
-            if (profile != null) add(profile.authHeader to (profile.authPrefix + key))
-            add("Authorization" to "Bearer $key")
-            add("x-api-key" to key)
-            add("x-goog-api-key" to key)
+
+        val outcomes = if (profile != null) {
+            val h = authHeader ?: profile.authHeader
+            val p = authPrefix ?: profile.authPrefix
+            val paths = listOfNotNull(modelsPath ?: profile.modelsPath, "/v1/models", "/models").distinct()
+            paths.map { path -> "$base$path" to mapOf(h to (p + key)) }
+        } else {
+            listOf(
+                "$base/v1/models" to mapOf("Authorization" to "Bearer $key"),
+                "$base/models" to mapOf("Authorization" to "Bearer $key"),
+                "$base/v1/models" to mapOf("x-api-key" to key)
+            )
         }
-        for (path in paths) {
-            for ((h, v) in headers) {
-                try {
-                    val resp = client.get("$base$path") { header(h, v) }
-                    if (resp.status.value in 200..299) {
-                        val body = resp.body<JsonElement>()
-                        return true to extractModels(body)
-                    }
-                    if (resp.status.value == 401 || resp.status.value == 403) {
-                        // try next header style before declaring invalid
-                    }
-                } catch (e: Exception) { }
-            }
+
+        for ((url, headers) in outcomes) {
+            try {
+                val resp = client.get(url) { headers.forEach { (k, v) -> header(k, v) } }
+                val code = resp.status.value
+                if (code in 200..299) {
+                    val models = extractModels(resp.body<JsonElement>())
+                    cache[cacheKey] = CacheEntry(true, models, System.currentTimeMillis())
+                    return true to models
+                }
+                if ((code == 401 || code == 403) && profile != null) {
+                    cache[cacheKey] = CacheEntry(false, emptyList(), System.currentTimeMillis())
+                    return false to emptyList()
+                }
+            } catch (e: Exception) { }
         }
+        cache[cacheKey] = CacheEntry(false, emptyList(), System.currentTimeMillis())
         return false to emptyList()
     }
 
@@ -113,18 +140,12 @@ class Api {
         val candidates = buildList {
             balancePath?.let { add("$base$it") }
             profile?.balancePath?.let { add("$base$it") }
-            add("$base/v1/usage")
-            add("$base/dashboard/billing/credit_grants")
-            add("$base/v1/credits")
-            add("$base/user/balance")
-            add("$base/v1/organization/usage")
         }.distinct()
         for (u in candidates) {
             try {
                 val resp = client.get(u) { header(HttpHeaders.Authorization, "Bearer $key") }
                 if (resp.status.value in 200..299) {
-                    val body = resp.body<String>()
-                    return summarizeBalance(body)
+                    return summarizeBalance(resp.body<String>())
                 }
             } catch (e: Exception) { }
         }
