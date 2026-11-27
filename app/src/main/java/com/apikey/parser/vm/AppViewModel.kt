@@ -183,4 +183,77 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+
+    fun detectPattern(providerId: String): String? {
+        val keys = _state.value.keys.filter { it.providerId == providerId }.map { it.key }
+        if (keys.size < 2) return null
+        val len = keys.minOf { it.length }
+        if (keys.any { it.length != len }) return null
+        return (0 until len).map { pos ->
+            val chars = keys.map { it[pos] }.toSet()
+            if (chars.size == 1) keys[0][pos] else '?'
+        }.joinToString("")
+    }
+
+    fun bruteForcePattern(providerIds: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+        val providers = _state.value.providers.filter { it.id in providerIds }
+        viewModelScope.launch {
+            for (p in providers) {
+                val keys = _state.value.keys.filter { it.providerId == p.id }.map { it.key }
+                if (keys.size < 2) continue
+                val len = keys.minOf { it.length }
+                if (keys.any { it.length != len }) continue
+                val varPositions = (0 until len).filter { pos -> keys.map { it[pos] }.toSet().size > 1 }
+                val varCharsets = varPositions.map { pos -> keys.map { it[pos] }.toSet().joinToString("") }
+                val total = varCharsets.fold(1) { acc, cs -> (acc * cs.length).coerceAtMost(200000) }
+                val indices = IntArray(varPositions.size)
+                var hasMore = true
+                var count = 0
+                val cap = 200000
+                val sem = kotlinx.coroutines.sync.Semaphore(_state.value.concurrency.coerceAtLeast(1))
+                while (hasMore && count < total && count < cap) {
+                    val batch = mutableListOf<String>()
+                    val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 4).coerceAtMost(64)
+                    repeat(batchSize) {
+                        if (count + batch.size >= total || count + batch.size >= cap) return@repeat
+                        val candChars = keys[0].toCharArray()
+                        var vi = 0
+                        for (i in varPositions.indices) {
+                            candChars[varPositions[i]] = varCharsets[i][indices[i]]
+                        }
+                        batch.add(String(candChars))
+                        // advance
+                        var pos = varPositions.size - 1
+                        while (pos >= 0) {
+                            indices[pos]++
+                            if (indices[pos] < varCharsets[pos].length) break
+                            indices[pos] = 0
+                            pos--
+                        }
+                        if (pos < 0) hasMore = false
+                    }
+                    if (batch.isEmpty()) break
+                    val currentBatch = batch.toList()
+                    kotlinx.coroutines.coroutineScope {
+                        val jobs = currentBatch.map { cand ->
+                            async {
+                                sem.acquire()
+                                try {
+                                    val (ok, _) = api.validateKey(p.baseUrl, cand)
+                                    if (ok) {
+                                        addKey(p.id, cand, "pattern")
+                                        onFound(cand, p.name)
+                                    }
+                                } finally { sem.release() }
+                            }
+                        }
+                        jobs.awaitAll()
+                    }
+                    count += currentBatch.size
+                    onProgress(count, total, p.name)
+                }
+            }
+            onDone()
+        }
+    }
 }

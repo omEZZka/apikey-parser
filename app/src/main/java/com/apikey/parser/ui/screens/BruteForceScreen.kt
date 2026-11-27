@@ -27,6 +27,8 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
             FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("Случайный") })
             Spacer(Modifier.width(8.dp))
             FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("Словарь") })
+            Spacer(Modifier.width(8.dp))
+            FilterChip(selected = mode == 2, onClick = { mode = 2 }, label = { Text("Паттерн") })
         }
         Spacer(Modifier.height(8.dp))
         Text("Провайдеры:")
@@ -51,6 +53,13 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text("Найдено: ${found.size}")
         found.takeLast(20).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (mode == 2) {
+            state.providers.filter { it.id in selected }.forEach { p ->
+                val pat = vm.detectPattern(p.id)
+                Text("${p.name}: ${pat ?: "нужно >=2 ключей одинаковой длины"}", style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         Spacer(Modifier.height(12.dp))
         Row {
             Button(enabled = !running && selected.isNotEmpty(), onClick = {
@@ -63,9 +72,15 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
                         onProgress = { a, b, name -> progress = a to b; current = name },
                         onDone = { running = false }
                     )
-                } else {
+                } else if (mode == 1) {
                     val cands = dict.lines().map { it.trim() }.filter { it.isNotBlank() }
                     vm.testCandidates(selected.toList(), cands,
+                        onFound = { key, _ -> found = found + key },
+                        onProgress = { a, b, name -> progress = a to b; current = name },
+                        onDone = { running = false }
+                    )
+                } else {
+                    vm.bruteForcePattern(selected.toList(),
                         onFound = { key, _ -> found = found + key },
                         onProgress = { a, b, name -> progress = a to b; current = name },
                         onDone = { running = false }
