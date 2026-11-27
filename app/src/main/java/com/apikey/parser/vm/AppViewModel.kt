@@ -37,13 +37,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     fun addProvider(name: String, baseUrl: String) {
-        val profile = ProviderCatalog.detectByUrl(baseUrl)
+        val raw = baseUrl.trim().trimEnd('/')
+        val profile = ProviderCatalog.detectByUrl(raw)
+        val normalized = when {
+            profile != null && !raw.startsWith("http") -> profile.baseUrl
+            !raw.startsWith("http") -> "https://$raw"
+            else -> raw
+        }
         val p = if (profile != null) {
             providerFromProfile(profile, name.ifBlank { profile.name }).copy(
-                baseUrl = baseUrl.trim().trimEnd('/'),
+                baseUrl = normalized,
                 keyExample = profile.keyRegex
             )
-        } else Provider(name = name, baseUrl = baseUrl.trim().trimEnd('/'))
+        } else Provider(name = name, baseUrl = normalized)
         _state.value = _state.value.copy(providers = _state.value.providers + p)
         persist()
         viewModelScope.launch {

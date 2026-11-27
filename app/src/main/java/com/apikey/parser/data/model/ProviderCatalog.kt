@@ -70,4 +70,9 @@ object ProviderCatalog {
         }
         return found.toList()
     }
+
+    fun detectByKeyLoose(key: String): ProviderProfile? {
+        val k = key.trim()
+        return profiles.firstOrNull { p -> p.keyPrefixes.any { k.startsWith(it) } }
+    }
 }
