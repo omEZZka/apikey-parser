@@ -109,7 +109,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         candidates.distinct().forEach { addKey(providerId, it) }
     }
 
-    fun bruteForce(providerIds: List<String>, charset: String, length: Int, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+    fun bruteForce(providerIds: List<String>, charset: String, length: Int, prefix: String, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
         val providers = _state.value.providers.filter { it.id in providerIds }
         if (providers.isEmpty() || charset.isEmpty() || length <= 0) { onDone(); return }
         val chars = charset.toList()
@@ -128,7 +128,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     batch.clear()
                     repeat(batchSize) {
                         if (count + batch.size >= total) return@repeat
-                        batch.add(indices.map { chars[it] }.joinToString(""))
+                        batch.add(prefix + indices.map { chars[it] }.joinToString(""))
                         // advance odometer
                         var pos = length - 1
                         while (pos >= 0) {
@@ -163,4 +163,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             onDone()
         }
     }
+    fun testCandidates(providerIds: List<String>, candidates: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onDone: () -> Unit) {
+        val providers = _state.value.providers.filter { it.id in providerIds }
+        viewModelScope.launch {
+            val total = candidates.size * providers.size
+            var count = 0
+            for (p in providers) {
+                for (c in candidates) {
+                    val (ok, _) = api.validateKey(p.baseUrl, c)
+                    count++
+                    onProgress(count, total, p.name)
+                    if (ok) {
+                        addKey(p.id, c, "import")
+                        onFound(c, p.name)
+                    }
+                }
+            }
+            onDone()
+        }
+    }
+
 }
