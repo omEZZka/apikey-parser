@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import com.apikey.parser.data.model.ApiKey
 import com.apikey.parser.data.model.Provider
 import com.apikey.parser.vm.AppViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> Unit, onBrute: (String) -> Unit, onSettings: () -> Unit, onThemes: () -> Unit) {
     val state by vm.state.collectAsState()
