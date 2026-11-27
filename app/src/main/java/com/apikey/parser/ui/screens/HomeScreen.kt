@@ -32,6 +32,7 @@ fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> U
     var query by remember { mutableStateOf("") }
     var onlyValid by remember { mutableStateOf(false) }
     var showSmart by remember { mutableStateOf(false) }
+    var patternProvider by remember { mutableStateOf<Provider?>(null) }
 
     val filteredKeys = state.keys.filter { k ->
         val p = state.providers.find { it.id == k.providerId }
@@ -110,13 +111,22 @@ fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> U
                 }
             }
             items(state.providers) { p ->
-                ProviderHeader(p, state.keys.count { it.providerId == p.id }, state.keys.count { it.providerId == p.id && it.status == "valid" })
+                ProviderHeader(
+                    p,
+                    state.keys.count { it.providerId == p.id },
+                    state.keys.count { it.providerId == p.id && it.status == "valid" },
+                    onClick = { patternProvider = p }
+                )
             }
             items(filteredKeys) { k ->
                 val p = state.providers.find { it.id == k.providerId }
                 KeyCard(k, p?.name ?: "?", { vm.toggleFavorite(k.id) }, { onKey(k.id) })
             }
         }
+    }
+
+    patternProvider?.let { prov ->
+        PatternDialog(vm, prov) { patternProvider = null }
     }
 
     if (showSmart) {
@@ -146,9 +156,9 @@ private fun StatCard(label: String, value: String, modifier: Modifier, highlight
 }
 
 @Composable
-private fun ProviderHeader(p: Provider, count: Int, valid: Int) {
+private fun ProviderHeader(p: Provider, count: Int, valid: Int, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp).clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(

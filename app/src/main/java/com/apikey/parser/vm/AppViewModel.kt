@@ -289,12 +289,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun detectPattern(providerId: String): String? {
         val keys = _state.value.keys.filter { it.providerId == providerId }.map { it.key }
-        if (keys.size < 2) return null
-        val len = keys.minOf { it.length }
-        if (keys.any { it.length != len }) return null
+        return patternForKeys(keys)
+    }
+
+    fun patternForKeys(keys: List<String>): String? {
+        val clean = keys.map { it.trim() }.filter { it.isNotBlank() }
+        if (clean.size < 2) return null
+        val len = clean.minOf { it.length }
+        if (clean.any { it.length != len }) return null
         return (0 until len).map { pos ->
-            val chars = keys.map { it[pos] }.toSet()
-            if (chars.size == 1) keys[0][pos] else '?'
+            val chars = clean.map { it[pos] }.toSet()
+            if (chars.size == 1) clean[0][pos] else '?'
         }.joinToString("")
     }
 
