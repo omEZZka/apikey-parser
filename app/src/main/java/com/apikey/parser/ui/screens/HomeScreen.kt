@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
 import com.apikey.parser.data.model.ApiKey
 import com.apikey.parser.data.model.Provider
