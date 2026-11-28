@@ -40,7 +40,7 @@ data class CharSetWeights(val chars: CharArray, val weights: FloatArray) {
         fun learned(observed: String, family: String): CharSetWeights {
             val counts = LinkedHashMap<Char, Float>()
             observed.forEach { counts[it] = (counts[it] ?: 0f) + 2f }
-            family.distinct().forEach { counts[it] = (counts[it] ?: 0f) + 1f }
+            family.toSet().forEach { counts[it] = (counts[it] ?: 0f) + 1f }
             val c = counts.keys.toCharArray()
             return CharSetWeights(c, FloatArray(c.size) { i -> counts[c[i]] ?: 1f })
         }

@@ -135,7 +135,11 @@ fun BruteForceScreen(vm: AppViewModel, onBack: () -> Unit) {
             Text("Параллелизм: ${state.concurrency}", style = MaterialTheme.typography.bodySmall)
             Slider(value = state.concurrency.toFloat(), onValueChange = { vm.setConcurrency(it.toInt()) }, valueRange = 1f..32f, steps = 30)
             Spacer(Modifier.height(4.dp))
-            LinearProgressIndicator(progress = if (progress.second > 0) (progress.first.toFloat() / progress.second).coerceIn(0f, 1f) else if (running) null else 0f, modifier = Modifier.fillMaxWidth())
+            if (running && progress.second == 0) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(progress = if (progress.second > 0) (progress.first.toFloat() / progress.second).coerceIn(0f, 1f) else 0f, modifier = Modifier.fillMaxWidth())
+            }
             Text("Прогресс: ${progress.first}${if (progress.second > 0) "/${progress.second}" else ""}  $current", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {

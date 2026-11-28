@@ -55,7 +55,7 @@ class CandidateGenerator(
                 in 60..79 -> encoded(st)
                 else -> mnemonic(st)
             }
-            if (candidate.isNotBlank()) {
+            if (!candidate.isNullOrBlank()) {
                 val h = hash(candidate)
                 if (seen.add(h)) {
                     generated++
@@ -158,7 +158,7 @@ class CandidateGenerator(
         var offset = 0
         for (seg in st.segments) {
             if (seg.fixed) {
-                seg.text.copyInto(out, offset)
+                for (k in seg.text.indices) out[offset + k] = seg.text[k]
                 offset += seg.text.length
             } else {
                 repeat(seg.length) {
@@ -201,7 +201,7 @@ class CandidateGenerator(
         var offset = 0
         for (seg in st.segments) {
             if (seg.fixed) {
-                seg.text.copyInto(out, offset)
+                for (k in seg.text.indices) out[offset + k] = seg.text[k]
                 offset += seg.text.length
             } else {
                 repeat(seg.length) {
@@ -224,8 +224,8 @@ class CandidateGenerator(
     }
 
     private fun hash(s: String): Long {
-        var h = 0xcbf29ce484222325L
-        for (c in s) h = (h xor c.code.toLong()) * 0x100000001b3L
+        var h = 1469598103934665603L
+        for (c in s) h = (h xor c.code.toLong()) * 1099511628211L
         return h
     }
 }
