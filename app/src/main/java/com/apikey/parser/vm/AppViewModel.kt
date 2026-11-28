@@ -3,26 +3,37 @@ package com.apikey.parser.vm
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.apikey.parser.data.gen.CandidateGenerator
 import com.apikey.parser.data.model.ApiKey
+import com.apikey.parser.data.model.KeyStructure
 import com.apikey.parser.data.model.Provider
 import com.apikey.parser.data.model.ProviderCatalog
 import com.apikey.parser.data.model.ProviderProfile
 import com.apikey.parser.data.net.Api
 import com.apikey.parser.data.smart.SmartParser
 import com.apikey.parser.data.store.Store
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
     private val api = Api()
     private val _state = MutableStateFlow(store.load())
     val state: StateFlow<com.apikey.parser.data.model.AppState> = _state.asStateFlow()
+
+    private var genJob: Job? = null
+    private val genStop = AtomicBoolean(false)
 
     fun persist() { store.save(_state.value) }
 
@@ -71,7 +82,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    fun addKey(providerId: String, key: String, label: String = ""): Boolean {
+    fun addKey(providerId: String, key: String, label: String = "", status: String? = null): Boolean {
         val trimmed = key.trim()
         if (trimmed.isBlank()) return false
         val existing = _state.value.keys.firstOrNull { it.providerId == providerId && it.key == trimmed }
@@ -79,10 +90,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             validateKey(existing.id)
             return false
         }
-        val k = ApiKey(providerId = providerId, key = trimmed, label = label)
+        val k = ApiKey(
+            providerId = providerId,
+            key = trimmed,
+            label = label,
+            status = status ?: "unknown",
+            lastChecked = if (status != null) System.currentTimeMillis() else 0L
+        )
         _state.value = _state.value.copy(keys = _state.value.keys + k)
         persist()
-        validateKey(k.id)
+        if (status == null) validateKey(k.id)
         return true
     }
 
@@ -124,9 +141,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    fun validateAll() {
-        _state.value.keys.forEach { validateKey(it.id) }
-    }
+    fun validateAll() { _state.value.keys.forEach { validateKey(it.id) } }
 
     fun setTheme(index: Int) {
         _state.value = _state.value.copy(themeIndex = index)
@@ -143,22 +158,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    override fun onCleared() {
-        super.onCleared()
-    }
+    fun analyzeExamples(text: String): KeyStructure? =
+        KeyStructure.analyze(text.lines().map { it.trim() }.filter { it.isNotBlank() })
+
+    fun savedExamples(providerIds: List<String>): List<String> =
+        _state.value.keys.filter { it.providerId in providerIds }.map { it.key }
 
     fun importKeys(providerId: String, text: String) {
         val p = _state.value.providers.find { it.id == providerId } ?: return
-        val candidates = smartKeys(p, text)
-        candidates.forEach { addKey(providerId, it) }
+        smartKeys(p, text).forEach { addKey(providerId, it) }
     }
 
     private fun smartKeys(p: Provider, text: String): List<String> {
         val profile = p.profileId?.let { id -> ProviderCatalog.profiles.find { it.id == id } }
             ?: ProviderCatalog.detectByUrl(p.baseUrl)
         if (profile != null) {
-            val re = Regex(profile.keyRegex)
-            val found = re.findAll(text).map { it.value }.toList()
+            val found = Regex(profile.keyRegex).findAll(text).map { it.value }.toList()
             if (found.isNotEmpty()) return found.distinct()
         }
         val template = p.keyExample ?: p.keyTemplate
@@ -183,7 +198,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val state = _state.value
         val providers = state.providers.toMutableList()
 
-        // ensure providers for known profiles found in the text
         for (profile in parsed.profiles) {
             if (providers.none { it.profileId == profile.id || it.baseUrl.contains(profile.hosts.first()) }) {
                 providers.add(providerFromProfile(profile))
@@ -191,7 +205,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 providerNames.add(profile.name)
             }
         }
-        // ensure providers for discovered URLs
         for (url in parsed.urls) {
             val profile = ProviderCatalog.detectByUrl(url)
             if (profile != null) {
@@ -223,13 +236,103 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return SmartImportReport(created, added, dup, providerNames.distinct())
     }
 
+    private data class GenTask(val provider: Provider, val generator: CandidateGenerator, val candidate: String)
+
+    fun generateKeys(
+        providerIds: List<String>,
+        examples: List<String>,
+        charset: String,
+        customCharset: Boolean,
+        target: Int,
+        onFound: (String, String) -> Unit,
+        onProgress: (Int, Int, String) -> Unit,
+        onAttempt: (String) -> Unit,
+        onStats: (Long, Long, Long, Double) -> Unit,
+        onDone: () -> Unit
+    ) {
+        val providers = _state.value.providers.filter { it.id in providerIds }
+        if (providers.isEmpty()) { onDone(); return }
+        genStop.set(false)
+        genJob?.cancel()
+        val concurrency = _state.value.concurrency.coerceAtLeast(1)
+        val sem = Semaphore(concurrency)
+        val channel = Channel<GenTask>(concurrency * 4)
+        val checked = AtomicLong(0)
+        val generated = AtomicLong(0)
+        val found = AtomicLong(0)
+        val start = System.currentTimeMillis()
+        val allExamples = examples.filter { it.isNotBlank() }.distinct()
+
+        genJob = viewModelScope.launch {
+            coroutineScope {
+                launch {
+                    val gens = providers.map { p ->
+                        val own = (allExamples + _state.value.keys.filter { it.providerId == p.id }.map { it.key }).distinct()
+                        p to CandidateGenerator(own, if (customCharset) charset else null)
+                    }
+                    var i = 0
+                    try {
+                        while (!genStop.get() && isActive && (target <= 0 || checked.get() < target)) {
+                            val (p, g) = gens[i % gens.size]
+                            i++
+                            val candidate = g.next()
+                            channel.send(GenTask(p, g, candidate))
+                            generated.incrementAndGet()
+                        }
+                    } finally {
+                        channel.close()
+                    }
+                }
+                repeat(concurrency) {
+                    launch {
+                        for (task in channel) {
+                            sem.acquire()
+                            var ok = false
+                            try {
+                                ok = api.validateKey(
+                                    task.provider.baseUrl, task.candidate, task.provider.modelsPath,
+                                    task.provider.authHeader, task.provider.authPrefix, task.provider.profileId
+                                ).first
+                            } finally {
+                                sem.release()
+                            }
+                            val n = checked.incrementAndGet()
+                            if (ok) {
+                                found.incrementAndGet()
+                                task.generator.addFound(task.candidate)
+                                addKey(task.provider.id, task.candidate, "generator", "valid")
+                                onFound(task.candidate, task.provider.name)
+                                onAttempt(task.candidate)
+                            } else if (n % 16L == 0L) {
+                                onAttempt(task.candidate)
+                            }
+                            if (n % 40L == 0L) {
+                                val sec = (System.currentTimeMillis() - start) / 1000.0
+                                onProgress(n.toInt(), if (target > 0) target else 0, task.provider.name)
+                                onStats(generated.get(), n, found.get(), if (sec > 0.0) n / sec else 0.0)
+                            }
+                        }
+                    }
+                }
+            }
+            val sec = (System.currentTimeMillis() - start) / 1000.0
+            onStats(generated.get(), checked.get(), found.get(), if (sec > 0.0) checked.get() / sec else 0.0)
+            onDone()
+        }
+    }
+
+    fun stopGeneration() {
+        genStop.set(true)
+        genJob?.cancel()
+        genJob = null
+    }
+
     fun bruteForce(providerIds: List<String>, charset: String, length: Int, prefix: String, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onAttempt: (String) -> Unit, onDone: () -> Unit) {
         val providers = _state.value.providers.filter { it.id in providerIds }
         if (providers.isEmpty() || charset.isEmpty() || length <= 0) { onDone(); return }
         val chars = charset.toList()
-        val estimated = Math.pow(chars.size.toDouble(), length.toDouble())
         val cap = 200000
-        val total = estimated.toInt().coerceAtMost(cap)
+        val total = Math.pow(chars.size.toDouble(), length.toDouble()).toInt().coerceAtMost(cap)
         viewModelScope.launch {
             for (p in providers) {
                 val sem = Semaphore(_state.value.concurrency.coerceAtLeast(1))
@@ -254,18 +357,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     if (batch.isEmpty()) break
                     val currentBatch = batch.toList()
-                    kotlinx.coroutines.coroutineScope {
-                        val jobs = currentBatch.map { cand ->
+                    coroutineScope {
+                        currentBatch.map { cand ->
                             async {
                                 sem.acquire()
                                 try {
                                     val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                                    if (ok) { addKey(p.id, cand, "bruteforce"); onFound(cand, p.name); onAttempt(cand) }
+                                    if (ok) { addKey(p.id, cand, "bruteforce", "valid"); onFound(cand, p.name); onAttempt(cand) }
                                     else if (java.util.concurrent.ThreadLocalRandom.current().nextInt(12) == 0) onAttempt(cand)
                                 } finally { sem.release() }
                             }
-                        }
-                        jobs.awaitAll()
+                        }.awaitAll()
                     }
                     count += currentBatch.size
                     onProgress(count, total, p.name)
@@ -281,22 +383,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val total = candidates.size * providers.size
             var count = 0
             for (p in providers) {
-                for (c in candidates) {
-                    val (ok, _) = api.validateKey(p.baseUrl, c, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                    if (ok) onAttempt(c)
-                    count++
-                    onProgress(count, total, p.name)
-                    if (ok) { addKey(p.id, c, "import"); onFound(c, p.name) }
+                val sem = Semaphore(_state.value.concurrency.coerceAtLeast(1))
+                coroutineScope {
+                    candidates.map { c ->
+                        async {
+                            sem.acquire()
+                            try {
+                                val (ok, _) = api.validateKey(p.baseUrl, c, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
+                                if (ok) { addKey(p.id, c, "import", "valid"); onFound(c, p.name); onAttempt(c) }
+                            } finally { sem.release() }
+                            val n = ++count
+                            onProgress(n, total, p.name)
+                        }
+                    }.awaitAll()
                 }
             }
             onDone()
         }
     }
 
-    fun detectPattern(providerId: String): String? {
-        val keys = _state.value.keys.filter { it.providerId == providerId }.map { it.key }
-        return patternForKeys(keys)
-    }
+    fun detectPattern(providerId: String): String? = patternForKeys(savedExamples(listOf(providerId)))
 
     fun patternForKeys(keys: List<String>): String? {
         val clean = keys.map { it.trim() }.filter { it.isNotBlank() }
@@ -309,59 +415,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.joinToString("")
     }
 
-    fun bruteForcePattern(providerIds: List<String>, onFound: (String, String) -> Unit, onProgress: (Int, Int, String) -> Unit, onAttempt: (String) -> Unit, onDone: () -> Unit) {
-        val providers = _state.value.providers.filter { it.id in providerIds }
-        viewModelScope.launch {
-            for (p in providers) {
-                val keys = _state.value.keys.filter { it.providerId == p.id }.map { it.key }
-                if (keys.size < 2) continue
-                val len = keys.minOf { it.length }
-                if (keys.any { it.length != len }) continue
-                val varPositions = (0 until len).filter { pos -> keys.map { it[pos] }.toSet().size > 1 }
-                val varCharsets = varPositions.map { pos -> keys.map { it[pos] }.toSet().joinToString("") }
-                val total = varCharsets.fold(1) { acc, cs -> (acc * cs.length).coerceAtMost(200000) }
-                val indices = IntArray(varPositions.size)
-                var hasMore = true
-                var count = 0
-                val cap = 200000
-                val sem = Semaphore(_state.value.concurrency.coerceAtLeast(1))
-                while (hasMore && count < total && count < cap) {
-                    val batch = mutableListOf<String>()
-                    val batchSize = (_state.value.concurrency.coerceAtLeast(1) * 8).coerceAtMost(128)
-                    repeat(batchSize) {
-                        if (count + batch.size >= total || count + batch.size >= cap) return@repeat
-                        val candChars = keys[0].toCharArray()
-                        for (i in varPositions.indices) candChars[varPositions[i]] = varCharsets[i][indices[i]]
-                        batch.add(String(candChars))
-                        var pos = varPositions.size - 1
-                        while (pos >= 0) {
-                            indices[pos]++
-                            if (indices[pos] < varCharsets[pos].length) break
-                            indices[pos] = 0
-                            pos--
-                        }
-                        if (pos < 0) hasMore = false
-                    }
-                    if (batch.isEmpty()) break
-                    val currentBatch = batch.toList()
-                    kotlinx.coroutines.coroutineScope {
-                        val jobs = currentBatch.map { cand ->
-                            async {
-                                sem.acquire()
-                                try {
-                                    val (ok, _) = api.validateKey(p.baseUrl, cand, p.modelsPath, p.authHeader, p.authPrefix, p.profileId)
-                                    if (ok) { addKey(p.id, cand, "pattern"); onFound(cand, p.name); onAttempt(cand) }
-                                    else if (java.util.concurrent.ThreadLocalRandom.current().nextInt(12) == 0) onAttempt(cand)
-                                } finally { sem.release() }
-                            }
-                        }
-                        jobs.awaitAll()
-                    }
-                    count += currentBatch.size
-                    onProgress(count, total, p.name)
-                }
-            }
-            onDone()
-        }
+    override fun onCleared() {
+        genJob?.cancel()
+        super.onCleared()
     }
 }

@@ -126,7 +126,7 @@ fun HomeScreen(vm: AppViewModel, onAddProvider: () -> Unit, onKey: (String) -> U
     }
 
     patternProvider?.let { prov ->
-        PatternDialog(vm, prov) { patternProvider = null }
+        PatternDialog(vm, prov, onGenerate = { patternProvider = null; onBrute() }) { patternProvider = null }
     }
 
     if (showSmart) {
